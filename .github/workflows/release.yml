@@ -13,6 +13,10 @@ on:
         type: choice
         options: [preview, stable]
         default: stable
+      activation_rollout:
+        description: "Prepare separate signed activation controls at this percentage; does not publish them"
+        required: true
+        default: "0"
       os_signing:
         description: "Unsigned installers are approved for v1.0.0; updater signing is always required."
         type: choice
@@ -187,6 +191,7 @@ jobs:
     env:
       RELEASE_TAG: ${{ inputs.tag }}
       RELEASE_COMMIT: ${{ needs.prepare.outputs.commit }}
+      ACTIVATION_ROLLOUT: ${{ inputs.activation_rollout }}
       RELEASE_CHANNEL: ${{ inputs.channel }}
       NEAR_DOT_UPDATE_REPO: ${{ github.repository }}
       NEAR_DOT_UPDATER_PUBLIC_KEY: ${{ vars.NEAR_DOT_UPDATER_PUBLIC_KEY }}
@@ -216,6 +221,20 @@ jobs:
           cp updater-public-key.txt release-artifacts/
           cp THIRD-PARTY-NOTICES.txt release-artifacts/
           node scripts/checksums.mjs release-artifacts
+          version="${RELEASE_TAG#v}"
+          channels="$RELEASE_CHANNEL"
+          if [[ "$RELEASE_CHANNEL" == stable ]]; then channels="stable preview"; fi
+          for channel in $channels; do
+            node scripts/prepare-channel.mjs "release-artifacts/$RELEASE_CHANNEL.json" channel-controls "$version" "$channel" "$ACTIVATION_ROLLOUT" false
+            npm run tauri -- signer sign "channel-controls/$channel.json"
+          done
+          node scripts/verify-signatures.mjs channel-controls
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: reviewed-channel-controls
+          path: channel-controls/*
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: "release-artifacts/*"

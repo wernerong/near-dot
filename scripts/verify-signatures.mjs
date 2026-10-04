@@ -76,6 +76,13 @@ if (
     throw new Error(
       "Provide the artifact directory and verification PUBLIC key.",
     );
+  for (const file of fs.readdirSync(directory)) {
+    if (
+      /\.(json|exe|tar\.gz|dmg)$/.test(file) &&
+      !fs.existsSync(path.join(directory, `${file}.sig`))
+    )
+      throw new Error("Every channel and package must have a signature.");
+  }
   const files = fs
     .readdirSync(directory)
     .filter((file) => file.endsWith(".sig"));

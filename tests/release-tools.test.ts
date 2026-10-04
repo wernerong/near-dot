@@ -152,3 +152,27 @@ it("combined feed requires all desktop installers and binds architecture, versio
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+it("directory verification rejects an unsigned channel alongside a valid signed channel", () => {
+  const dir = mkdtempSync(join(tmpdir(), "near-dot-channel-test-"));
+  try {
+    const bytes = Buffer.from("synthetic channel bytes");
+    const { key, signature } = signedFixture(bytes);
+    writeFileSync(join(dir, "stable.json"), bytes);
+    writeFileSync(join(dir, "stable.json.sig"), signature);
+    const check = () =>
+      spawnSync(
+        process.execPath,
+        [resolve("scripts/verify-signatures.mjs"), dir],
+        {
+          encoding: "utf8",
+          env: { ...process.env, NEAR_DOT_UPDATER_PUBLIC_KEY: key },
+        },
+      );
+    expect(check().status).toBe(0);
+    writeFileSync(join(dir, "preview.json"), "unsigned synthetic channel");
+    expect(check().status).not.toBe(0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

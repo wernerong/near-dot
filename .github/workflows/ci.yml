@@ -28,11 +28,30 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Identify changes that require native builds
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=$(git merge-base origin/main HEAD)
+          if [[ "$base" == "$(git rev-parse HEAD)" ]]; then base=$(git rev-parse HEAD^); fi
+          git diff --name-only "$base" HEAD > "$RUNNER_TEMP/near-dot-changed.txt"
+          python - <<'PYCODE'
+          import os, pathlib, re
+          paths = pathlib.Path(os.environ['RUNNER_TEMP'], 'near-dot-changed.txt').read_text().splitlines()
+          metadata = bool(paths) and all(re.fullmatch(r'channels/(stable|preview)\.json(\.sig)?|docs/ACCEPTANCE\.md', p) for p in paths)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('native=' + str(not metadata).lower() + '\n')
+          print('Signed channel/evidence checks only.' if metadata else 'Full native validation required.')
+          PYCODE
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22.22.2"
           cache: npm
-      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d
+      - if: steps.changes.outputs.native == 'true'
+        uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d
         with:
           toolchain: "1.95.0"
           components: rustfmt, clippy
@@ -40,29 +59,45 @@ jobs:
       - run: npm run build
       - run: npm test
       - name: Validate private macOS relay
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.changes.outputs.native == 'true'
         run: python3 -m unittest discover -s experiments/dot-relay -p 'test_*.py' -v
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings
-      - run: cargo check --manifest-path src-tauri/Cargo.toml --locked --example update-drill
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - if: steps.changes.outputs.native == 'true'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - if: steps.changes.outputs.native == 'true'
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings
+      - if: steps.changes.outputs.native == 'true'
+        run: cargo check --manifest-path src-tauri/Cargo.toml --locked --example update-drill
+      - if: steps.changes.outputs.native == 'true'
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - name: Check optional private Mac adapter
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.changes.outputs.native == 'true'
         run: cargo check --manifest-path src-tauri/Cargo.toml --features private-relay --locked
       - run: npm audit --audit-level=moderate
-      - run: cargo install cargo-audit --version 0.22.2 --locked
-      - run: cargo audit --file src-tauri/Cargo.lock
+      - if: steps.changes.outputs.native == 'true'
+        run: cargo install cargo-audit --version 0.22.2 --locked
+      - if: steps.changes.outputs.native == 'true'
+        run: cargo audit --file src-tauri/Cargo.lock
       - run: python scripts/scan-public.py
       - run: python scripts/run-gitleaks.py
-      - run: npx playwright install chromium
-      - run: npm run test:ui
+      - if: steps.changes.outputs.native == 'true'
+        run: npx playwright install chromium
+      - if: steps.changes.outputs.native == 'true'
+        run: npm run test:ui
+      - name: Verify signed channel controls when present
+        shell: bash
+        run: |
+          if [[ -d channels ]]; then
+            NEAR_DOT_UPDATER_PUBLIC_KEY="$(cat updater-public-key.txt)" node scripts/verify-signatures.mjs channels
+          fi
       - name: Build public installer for review only
+        if: steps.changes.outputs.native == 'true'
         env:
           BUILD_TARGET: ${{ matrix.target }}
           BUILD_BUNDLES: ${{ matrix.bundles }}
         shell: bash
         run: npm run tauri -- build --ci --target "$BUILD_TARGET" --bundles "$BUILD_BUNDLES"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - if: steps.changes.outputs.native == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: review-${{ matrix.os }}
           path: |
