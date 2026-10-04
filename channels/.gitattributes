@@ -1,0 +1,3 @@
+# Signed feeds and signatures must retain their exact bytes on every platform.
+*.json -text
+*.sig -text
