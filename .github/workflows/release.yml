@@ -20,6 +20,7 @@ on:
         default: unsigned
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: signed-release
   cancel-in-progress: false
