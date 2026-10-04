@@ -47,6 +47,13 @@ pub struct AppState {
     position_dirty: AtomicBool,
     last_move: Mutex<std::time::Instant>,
 }
+fn set_floating(window: &WebviewWindow, enabled: bool) -> tauri::Result<()> {
+    window.set_always_on_top(enabled)?;
+    #[cfg(target_os = "macos")]
+    window.set_visible_on_all_workspaces(enabled)?;
+    Ok(())
+}
+
 fn avatar_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_config_dir()
@@ -59,17 +66,26 @@ fn get_avatar(w: WebviewWindow, app: tauri::AppHandle) -> Result<avatar::View, S
     Ok(app.state::<AppState>().avatar.lock().unwrap().clone())
 }
 #[tauri::command]
-async fn import_avatar(w: WebviewWindow, app: tauri::AppHandle) -> Result<avatar::View, String> {
+async fn import_avatar(
+    w: WebviewWindow,
+    app: tauri::AppHandle,
+    kind: Option<avatar::Kind>,
+) -> Result<avatar::View, String> {
     known(&w)?;
     if !["settings", "chat"].contains(&w.label()) {
         return Err("Choose an image from Chat or Settings.".into());
     }
+    let kind = kind.unwrap_or_default();
     let state = app.state::<AppState>();
     let _operation = state.avatar_operation.lock().await;
     let (sender, receiver) = tokio::sync::oneshot::channel();
     app.dialog()
         .file()
-        .set_title("Choose a local companion image")
+        .set_parent(&w)
+        .set_title(match kind {
+            avatar::Kind::Image => "Choose your companion icon",
+            avatar::Kind::Pet => "Import your pet sprite sheet",
+        })
         .add_filter("Still PNG image", &["png"])
         .pick_file(move |file| {
             let _ = sender.send(file);
@@ -82,16 +98,20 @@ async fn import_avatar(w: WebviewWindow, app: tauri::AppHandle) -> Result<avatar
     };
     let source = file.into_path().map_err(|_| "Choose a local image file.")?;
     let destination = avatar_path(&app)?;
-    let view = tauri::async_runtime::spawn_blocking(move || avatar::import(&source, &destination))
-        .await
-        .map_err(|_| "Image could not be prepared.")??;
+    let view =
+        tauri::async_runtime::spawn_blocking(move || avatar::import(&source, &destination, kind))
+            .await
+            .map_err(|_| "Image could not be prepared.")??;
     *app.state::<AppState>().avatar.lock().unwrap() = view.clone();
     let _ = app.emit("avatar-changed", view.clone());
     Ok(view)
 }
 #[tauri::command]
 async fn reset_avatar(w: WebviewWindow, app: tauri::AppHandle) -> Result<avatar::View, String> {
-    settings_only(&w)?;
+    known(&w)?;
+    if !["settings", "chat"].contains(&w.label()) {
+        return Err("Choose an image from Chat or Settings.".into());
+    }
     let state = app.state::<AppState>();
     let _operation = state.avatar_operation.lock().await;
     let path = avatar_path(&app)?;
@@ -195,7 +215,8 @@ fn show_chat(app: &tauri::AppHandle) {
     }
     if let Some(w) = app.get_webview_window("chat") {
         place_near_companion(app, "chat");
-        let _ = w.set_always_on_top(
+        let _ = set_floating(
+            &w,
             app.state::<AppState>()
                 .preferences
                 .lock()
@@ -340,7 +361,8 @@ fn chat_monitor(app: tauri::AppHandle) {
                         );
                         place_near_companion(&app, "bubble");
                         if let Some(w) = app.get_webview_window("bubble") {
-                            let _ = w.set_always_on_top(
+                            let _ = set_floating(
+                                &w,
                                 app.state::<AppState>()
                                     .preferences
                                     .lock()
@@ -427,7 +449,7 @@ fn persist(app: &tauri::AppHandle) -> Result<(), String> {
 fn companion_data(app: &tauri::AppHandle) -> serde_json::Value {
     let s = app.state::<AppState>();
     let p = s.preferences.lock().unwrap();
-    serde_json::json!({"size":p.size,"opacity":p.opacity,"paused":p.paused,"hidden":s.hidden.load(Ordering::Relaxed),"configured":p.verified})
+    serde_json::json!({"size":p.size,"opacity":p.opacity,"paused":p.paused,"hidden":s.hidden.load(Ordering::Relaxed),"configured":p.verified,"alwaysOnTop":app.get_webview_window("companion").and_then(|w| w.is_always_on_top().ok()).unwrap_or(false)})
 }
 fn changed(app: &tauri::AppHandle) {
     let _ = app.emit_to("companion", "companion-config", companion_data(app));
@@ -448,6 +470,7 @@ fn toggle(app: &tauri::AppHandle) {
             let _ = w.hide();
         } else {
             recover(app, false);
+            let _ = set_floating(&w, s.preferences.lock().unwrap().always_on_top);
             let _ = w.show();
         }
     }
@@ -528,14 +551,22 @@ fn save_preferences(
     if shortcut_changed && !old.shortcut.is_empty() {
         let _ = app.global_shortcut().unregister(old.shortcut.as_str());
     }
+    *s.preferences.lock().unwrap() = preferences.clone();
     if let Some(pet) = app.get_webview_window("companion") {
-        let _ = pet.set_always_on_top(preferences.always_on_top);
+        set_floating(&pet, preferences.always_on_top).map_err(|_| {
+            "Settings saved, but always-on-top could not be applied. Restart the app to retry."
+                .to_string()
+        })?;
+        for label in ["chat", "bubble"] {
+            if let Some(window) = app.get_webview_window(label) {
+                set_floating(&window, preferences.always_on_top).map_err(|_| "Settings saved, but always-on-top could not be applied. Restart the app to retry.".to_string())?;
+            }
+        }
         let _ = pet.set_size(LogicalSize::new(
             preferences.size as f64,
             preferences.size as f64 + 20.,
         ));
     }
-    *s.preferences.lock().unwrap() = preferences;
     if shortcut_changed {
         *s.shortcut_warning.lock().unwrap() = None;
     }
@@ -758,7 +789,7 @@ pub fn run() {
             chat_monitor(app.handle().clone());
             let pet = app.get_webview_window("companion").unwrap();
             pet.set_size(LogicalSize::new(p.size as f64, p.size as f64 + 20.))?;
-            pet.set_always_on_top(p.always_on_top)?;
+            set_floating(&pet, p.always_on_top)?;
             if let Some((x, y)) = p.position {
                 pet.set_position(PhysicalPosition::new(x, y))?;
             }
@@ -867,6 +898,16 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|w, e| {
+            if matches!(e, WindowEvent::Focused(_))
+                && w.label() == "companion"
+                && w.app_handle().try_state::<AppState>().is_some()
+            {
+                let _ = w.app_handle().emit_to(
+                    "companion",
+                    "companion-config",
+                    companion_data(w.app_handle()),
+                );
+            }
             if let WindowEvent::Moved(pos) = e {
                 if w.label() == "companion" {
                     if let Some(s) = w.app_handle().try_state::<AppState>() {

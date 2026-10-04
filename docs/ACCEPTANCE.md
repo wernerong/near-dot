@@ -8,15 +8,17 @@ Recorded 4 October 2026 for the 0.2.0-preview.1 source preview. **Public binary 
 | --- | --- |
 | TypeScript production build | `npm run build`; packaged UI. |
 | TypeScript tests | 15 tests: destination validation, drag threshold and release configuration using synthetic inputs. |
-| Rust tests | 12 tests: validation, atomic preferences, corrupt/future preservation, geometry, update policy, image rules and bounded chat input. |
+| Rust tests | 14 tests: validation, atomic preferences, corrupt/future preservation, geometry, update policy, image rules and bounded chat input. |
 | Cryptographic tamper rejection | Ephemeral Minisign key: original accepted; altered bytes and wrong key rejected. This is not an installer upgrade test. |
 | Private relay tests | 24 Python tests: protocol, callback validation/signatures, SSRF defenses, expiry, local-only extension, persistence, idempotent replies, retry, key handling, redacted health and desktop adapter. |
-| Browser UI/accessibility | 7 Playwright tests including axe WCAG A/AA, keyboard, reduced motion, link confirmation, inert offline Chat and bubble actions. Not NVDA/VoiceOver certification. |
+| Browser UI/accessibility | 9 Playwright tests including axe WCAG A/AA, keyboard, reduced motion, link confirmation, inert offline Chat and bubble actions. Not NVDA/VoiceOver certification. |
 | Formatting/lint | Rust fmt and Clippy with warnings denied. |
 | Secret scans | Public-source guard and checksum-pinned Gitleaks 8.30.1 over source and Git history. Generated/private files excluded. |
 | Dependency audits | npm: zero reported vulnerabilities. Cargo: no blocking vulnerability; Linux-only warnings below. |
 
-Public screenshots are [Settings](settings-preview.png) and [companion](companion-preview.png) browser previews with original artwork and no personal link. Personal native evidence is ignored locally.
+Pet import tests verify exact first-cell pixels and transparency for both supported PNG layouts, metadata stripping, restart persistence, previous-image preservation and rejection without replacement. Appearance choices pass browser keyboard/modal-focus and automated accessibility checks. New-install floating defaults on; explicit existing off preferences remain off.
+
+Public screenshots are [Appearance choices](appearance-preview.png), [Settings](settings-preview.png) and [companion](companion-preview.png) browser previews with original artwork and no personal link. Personal native evidence is ignored locally.
 
 Cargo warnings: `RUSTSEC-2024-0370` (`proc-macro-error`, unmaintained) and `RUSTSEC-2024-0429` (`glib`, unsound iterator). Neither dependency was found in the Mac target path; the Windows glib path was also empty. Linux is unsupported. Recheck target-specific paths and advisories for release; do not suppress them globally.
 
@@ -28,6 +30,17 @@ Cargo warnings: `RUSTSEC-2024-0370` (`proc-macro-error`, unmaintained) and `RUST
 - Settings, relay history and a local PNG survived app replacement/restart. This is not a signed version upgrade or automatic avatar sync.
 - The installed copy matched the tested bundle. Launch started the verified client without a terminal. Native Quit left no app or owned client process. Hide/show, position reset and single-instance behavior were exercised.
 - Reconnect/status cleanup and the prerelease version bump are covered by local build/checks; the earlier native exchange remains the live transport evidence, not a new end-to-end test of every source revision.
+
+## Local appearance and floating-window follow-up
+
+The same public source was continued in the new workspace; private art and credentials were not copied into it. The updated local arm64 development app was built, signed ad hoc, verified with `codesign --verify --deep --strict`, and its installed executable matched the tested bundle. This is not distribution signing or notarization.
+
+- Native Chat avatar chooser offered pet-sheet import, custom PNG and restore-default actions.
+- A real owned PNG pet sheet was imported through that chooser; the original first idle frame appeared on the companion without an external cropper. The image survived replacement/relaunch. Personal evidence remains ignored locally.
+- Existing always-on-top was explicitly enabled and saved on the test device. After relaunch, the OS-reported floating-window state stayed enabled while a Chrome search control held focus. This confirms the native window level; browser screenshots do not capture other applications’ overlays.
+- Mac Spaces following uses Tauri’s supported window API but has not been exercised by a physical Space switch. Full-screen/security-screen overlay behavior and Windows device behavior remain untested.
+- Automated checks: 15 TypeScript, 14 Rust, 24 relay and 9 browser tests passed; Clippy/fmt, npm audit and public-source/Gitleaks scans passed. Existing Linux-only Cargo warnings remain.
+- Release assets are unchanged; no new binary release was published for this follow-up.
 
 ## Performance
 

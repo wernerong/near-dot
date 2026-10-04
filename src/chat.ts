@@ -1,3 +1,4 @@
+import { bindAppearance } from "./appearance";
 import { call, on, preview } from "./platform";
 import type { Avatar, ChatSnapshot } from "./types";
 const el = <T extends HTMLElement = HTMLElement>(id: string) =>
@@ -163,8 +164,10 @@ export async function chatUI() {
     }
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape")
-      void call("companion_action", { action: "close-chat" });
+    if (e.key === "Escape" && !document.querySelector("dialog[open]"))
+      void call("companion_action", { action: "close-chat" }).catch((e) =>
+        error(failure(e)),
+      );
   });
   await on("chat-focus", () => message.focus());
   for (const [id, action] of [
@@ -190,13 +193,7 @@ export async function chatUI() {
   };
   el("chat-browser").onclick = () =>
     void call("open_destination").catch((e) => error(failure(e)));
-  el("chat-avatar-button").onclick = async () => {
-    try {
-      avatar(await call<Avatar>("import_avatar"));
-    } catch (e) {
-      error(failure(e));
-    }
-  };
+  bindAppearance(el("chat-avatar-button"), avatar);
 }
 
 export async function bubbleUI() {

@@ -9,7 +9,7 @@ An independent, local desktop companion for your existing dot, with a browser la
 ## What it does
 
 - Original transparent seed companion, gentle animation and hover feedback.
-- Optional local PNG image for your companion, with metadata stripped and no upload or profile scraping.
+- Custom local PNG icon or pet sprite-sheet import, preserving the original idle frame with metadata stripped and no upload or profile scraping.
 - Click or configurable global shortcut to open the companion chat panel. Open ChatGPT explicitly from the panel or tray. Private chat currently works only with the configured macOS relay; other devices retain the browser launcher option.
 - Tray/menu bar access, hide/show, pause, size, opacity, always-on-top, position reset and settings.
 - Opt-in login startup. Keyboard access through the settings window and tray; reduced-motion support.
@@ -78,7 +78,13 @@ If Node cannot find a locally trusted issuer, configure `NODE_EXTRA_CA_CERTS` wi
 3. Select **Test link**. Confirm the default browser opens your existing dot. If it opens a different conversation, a login screen or an unavailable page, leave it unconfirmed and fix access in ChatGPT.
 4. Tick the test confirmation, then **Save settings**. Use **Open ChatGPT** in the chat panel or tray. Clicking the companion or using the shortcut opens the local chat panel.
 
-Choose **Settings → Choose local image** to use a PNG of your dot that you already have permission to use. Images must be still PNGs up to 1024 × 1024 pixels and 4 MiB. The image is decoded and stored only in your per-user app directory, separate from the public project. It changes the on-screen companion, not the installed application or tray icon. No automatic avatar download or synchronization is implemented. Restore default preserves the previous image locally.
+Choose **Settings → Choose local image** for any still PNG up to 1024 × 1024 pixels and 4 MiB. Or choose **Import pet sprite sheet** for a downloaded PNG pet sheet up to 20 MiB: 1536 × 1872 or 1536 × 2288 pixels (192 × 208 cells). Near Dot extracts the first idle cell without regenerating or altering its pixels. Click the avatar in Chat to open the same appearance choices, including Restore default. Unsupported sheets and animated PNGs are rejected before replacing your image.
+
+For an existing ChatGPT pet, use the download option in **Settings → Personalization → Pet** where available ([official pet documentation](https://learn.chatgpt.com/docs/pets)). Desktop custom pets may be stored only on the computer where they were created; use an exported PNG from that device. WebP exports must be saved as PNG first. This is a local import, with no account access or automatic avatar synchronization.
+
+Only use art you have permission to use. Images are decoded and metadata is stripped; only the resulting still PNG is saved in your per-user app directory. It changes the companion and chat avatar, not the installed application or tray icon. Changing or restoring your image preserves the previous PNG locally.
+
+**Always on top** defaults to enabled for new installations. Existing preferences are retained; enable it in Settings and save if it was previously off. The companion stays above ordinary app windows without focusing itself, and follows Mac Spaces while enabled. The chat and reply windows use the same setting. OS security screens and exclusive full-screen applications can override window stacking; full-screen coverage has not been established.
 
 No desktop app scheme is enabled because the checked sources did not document an exact-dot launch contract. Links are per user and per device. Do not assume a desktop link works on an iPhone.
 

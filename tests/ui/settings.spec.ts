@@ -135,3 +135,57 @@ test("reply bubble has accessible read and dismiss actions", async ({
     page.getByRole("button", { name: "Dismiss reply", exact: true }),
   ).toBeVisible();
 });
+
+test("appearance choices include pet import and custom icons with keyboard access", async ({
+  page,
+}) => {
+  await page.goto("/?view=chat");
+  await page
+    .getByRole("button", { name: "Choose your dot image", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Your companion",
+    exact: true,
+  });
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("button", {
+      name: "Import pet sprite sheet",
+      exact: true,
+    }),
+  ).toBeFocused();
+  await expect(
+    dialog.getByRole("button", { name: "Choose local image", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: "docs/appearance-preview.png" });
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  expect(results.violations.map((v) => v.id)).toEqual([]);
+  await dialog
+    .getByRole("button", { name: "Import pet sprite sheet", exact: true })
+    .click();
+  await expect(dialog.getByRole("status")).toContainText(
+    "Browser preview only.",
+  );
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator("#chat-error")).toBeEmpty();
+  await expect(
+    page.getByRole("button", { name: "Choose your dot image", exact: true }),
+  ).toBeFocused();
+});
+
+test("floating defaults on and pet import is available in settings", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByLabel("Always on top", { exact: true })).toBeChecked();
+  await page
+    .getByRole("button", { name: "Import pet sprite sheet", exact: true })
+    .click();
+  await expect(page.locator("#status")).toContainText("Browser preview only.");
+  await expect(
+    page.getByRole("button", { name: "Choose local image", exact: true }),
+  ).toBeEnabled();
+});

@@ -23,6 +23,7 @@
         "shadow": false,
         "resizable": false,
         "skipTaskbar": true,
+        "alwaysOnTop": true,
         "visible": false,
         "focus": false
       },

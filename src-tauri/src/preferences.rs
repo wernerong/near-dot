@@ -30,7 +30,7 @@ impl Default for Preferences {
             shortcut: "CommandOrControl+Shift+D".into(),
             size: 156,
             opacity: 1.,
-            always_on_top: false,
+            always_on_top: true,
             paused: false,
             reply_preview: false,
             startup: false,
@@ -109,6 +109,9 @@ mod tests {
         assert_eq!(load(&path).unwrap(), Preferences::default());
         fs::write(&path, r#"{"schema":1,"paused":true}"#).unwrap();
         assert!(load(&path).unwrap().paused);
+        assert!(load(&path).unwrap().always_on_top);
+        fs::write(&path, r#"{"schema":1,"alwaysOnTop":false}"#).unwrap();
+        assert!(!load(&path).unwrap().always_on_top);
     }
     #[test]
     fn preserves_corrupt_and_future_settings() {

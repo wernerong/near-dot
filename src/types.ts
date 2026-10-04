@@ -23,7 +23,7 @@ export const defaults: Preferences = {
   shortcut: "CommandOrControl+Shift+D",
   size: 156,
   opacity: 1,
-  alwaysOnTop: false,
+  alwaysOnTop: true,
   paused: false,
   replyPreview: false,
   startup: false,
@@ -42,6 +42,7 @@ export interface Snapshot {
   updateStatus: UpdateStatus | null;
 }
 export interface Companion {
+  alwaysOnTop: boolean;
   size: number;
   opacity: number;
   paused: boolean;
