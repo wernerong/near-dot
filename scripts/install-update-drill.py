@@ -89,6 +89,15 @@ with tempfile.TemporaryDirectory(prefix='neardot-release-drill-') as temp:
             executable = installed/'Near Dot.app/Contents/MacOS/near-dot'
         assert executable.is_file(), 'Baseline executable missing'
         before_executable = digest(executable)
+        if windows:
+            # Tauri patches the bundled executable with NSIS identity, then
+            # restores the unpatched build-directory copy. Compare the actual
+            # signed installer's payload, including any Authenticode signature.
+            payload = root/'expected-payload'
+            run(['7z', 'e', package, 'near-dot.exe', '-r', f'-o{payload}', '-y'], stdout=subprocess.DEVNULL)
+            expected = payload/'near-dot.exe'
+            assert expected.is_file(), 'Candidate installer executable missing'
+            expected_digest = digest(expected)
         # The TLS private key is ephemeral test material, unrelated to updater signing.
         run([sys.executable, 'scripts/create-test-tls.py', root])
         (root/'public-key.txt').write_text(public_key)
@@ -122,11 +131,10 @@ with tempfile.TemporaryDirectory(prefix='neardot-release-drill-') as temp:
         assert digest(executable)!=before_executable, 'Updater did not replace the baseline executable'
         assert digest(preferences)==before_preferences, 'Updater changed preferences'
         if windows:
-            expected=Path('src-tauri/target')/target/'release/near-dot.exe'
-            assert digest(executable)==digest(expected), 'Installed executable differs from candidate'
+            assert digest(executable)==expected_digest, 'Installed executable differs from signed installer payload'
             # Recovery after rejected download: reinstall the newer trusted candidate.
             run([package,'/S',f'/D={installed}'])
-            assert digest(executable)==digest(expected)
+            assert digest(executable)==expected_digest
             uninstall=installed/'uninstall.exe'
             assert uninstall.exists(), 'Uninstaller missing'
             run([uninstall,'/S',f'_?={installed}'])
