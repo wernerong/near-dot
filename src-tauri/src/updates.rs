@@ -147,6 +147,9 @@ fn key_repo(app: &AppHandle) -> Result<(String, String), String> {
     }
     Ok((key, repo))
 }
+pub fn configured(app: &AppHandle) -> bool {
+    key_repo(app).is_ok()
+}
 async fn fetch(client: &reqwest::Client, url: &str, limit: usize) -> Result<Vec<u8>, String> {
     let mut r = client
         .get(url)

@@ -39,6 +39,7 @@ pub struct AppState {
     path: PathBuf,
     load_error: Mutex<Option<String>>,
     shortcut_warning: Mutex<Option<String>>,
+    tested_destination: Mutex<Option<String>>,
     hidden: AtomicBool,
     pending: Mutex<Option<updates::Pending>>,
     update_lock: tokio::sync::Mutex<()>,
@@ -209,6 +210,10 @@ fn show_latest_reply(app: &tauri::AppHandle) {
     }
 }
 fn show_chat(app: &tauri::AppHandle) {
+    if !chat::enabled() {
+        show_settings(app);
+        return;
+    }
     let _ = app.emit_to("companion", "reply-available", false);
     if let Some(b) = app.get_webview_window("bubble") {
         let _ = b.hide();
@@ -226,6 +231,17 @@ fn show_chat(app: &tauri::AppHandle) {
         let _ = w.show();
         let _ = w.set_focus();
         let _ = app.emit_to("chat", "chat-focus", ());
+    }
+}
+fn activate(app: &tauri::AppHandle) -> Result<(), String> {
+    if chat::enabled() {
+        show_chat(app);
+        Ok(())
+    } else {
+        launch(app).inspect_err(|message| {
+            show_settings(app);
+            let _ = app.emit_to("settings", "app-error", message);
+        })
     }
 }
 #[tauri::command]
@@ -449,7 +465,7 @@ fn persist(app: &tauri::AppHandle) -> Result<(), String> {
 fn companion_data(app: &tauri::AppHandle) -> serde_json::Value {
     let s = app.state::<AppState>();
     let p = s.preferences.lock().unwrap();
-    serde_json::json!({"size":p.size,"opacity":p.opacity,"paused":p.paused,"hidden":s.hidden.load(Ordering::Relaxed),"configured":p.verified,"alwaysOnTop":app.get_webview_window("companion").and_then(|w| w.is_always_on_top().ok()).unwrap_or(false)})
+    serde_json::json!({"size":p.size,"opacity":p.opacity,"paused":p.paused,"hidden":s.hidden.load(Ordering::Relaxed),"configured":p.verified,"chatEnabled":chat::enabled(),"alwaysOnTop":app.get_webview_window("companion").and_then(|w| w.is_always_on_top().ok()).unwrap_or(false)})
 }
 fn changed(app: &tauri::AppHandle) {
     let _ = app.emit_to("companion", "companion-config", companion_data(app));
@@ -481,8 +497,9 @@ fn get_preferences(w: WebviewWindow, app: tauri::AppHandle) -> Result<serde_json
     settings_only(&w)?;
     measure_startup();
     let s = app.state::<AppState>();
+    let preferences = s.preferences.lock().unwrap().clone();
     Ok(
-        serde_json::json!({"preferences":s.preferences.lock().unwrap().clone(),"warning":s.load_error.lock().unwrap().clone().or(s.shortcut_warning.lock().unwrap().clone()),"version":app.package_info().version.to_string(),"updatesConfigured":option_env!("NEAR_DOT_UPDATE_REPO").is_some(),"updateStatus":s.update_status.lock().unwrap().clone()}),
+        serde_json::json!({"preferences":preferences,"warning":s.load_error.lock().unwrap().clone().or(s.shortcut_warning.lock().unwrap().clone()),"version":app.package_info().version.to_string(),"setupRequired":preferences.needs_setup(),"chatEnabled":chat::enabled(),"updatesConfigured":updates::configured(&app),"updateStatus":s.update_status.lock().unwrap().clone()}),
     )
 }
 #[tauri::command]
@@ -501,8 +518,10 @@ fn test_destination(w: WebviewWindow, app: tauri::AppHandle, url: String) -> Res
     settings_only(&w)?;
     let url = destination::validate(&url)?;
     app.opener()
-        .open_url(url, None::<&str>)
-        .map_err(|_| "Browser launch failed.".into())
+        .open_url(&url, None::<&str>)
+        .map_err(|_| "Browser launch failed.".to_string())?;
+    *app.state::<AppState>().tested_destination.lock().unwrap() = Some(url);
+    Ok(())
 }
 #[tauri::command]
 fn save_preferences(
@@ -521,6 +540,12 @@ fn save_preferences(
     preferences.cohort = old.cohort;
     if !preferences.destination.is_empty() {
         preferences.destination = destination::validate(&preferences.destination)?;
+    }
+    if preferences.verified
+        && !(old.verified && old.destination == preferences.destination)
+        && s.tested_destination.lock().unwrap().as_ref() != Some(&preferences.destination)
+    {
+        return Err("Use Test link on this device before confirming your destination.".into());
     }
     let shortcut_changed = old.shortcut != preferences.shortcut;
     if shortcut_changed && !preferences.shortcut.is_empty() {
@@ -601,6 +626,7 @@ fn companion_action(w: WebviewWindow, app: tauri::AppHandle, action: String) -> 
     known(&w)?;
     match action.as_str() {
         "settings" => show_settings(&app),
+        "activate" => activate(&app)?,
         "chat" => show_chat(&app),
         "latest-reply" => show_latest_reply(&app),
         "dismiss-reply" => {
@@ -676,8 +702,18 @@ fn tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         ("quit", "Quit"),
     ]
     .iter()
+    .filter(|(id, _)| chat::enabled() || !["chat", "latest-reply"].contains(id))
     .map(|(id, text)| MenuItem::with_id(app, *id, *text, true, None::<&str>))
     .collect::<tauri::Result<Vec<_>>>()?;
+    let version = MenuItem::with_id(
+        app,
+        "version",
+        format!("Near Dot v{}", app.package_info().version),
+        false,
+        None::<&str>,
+    )?;
+    let mut items = items;
+    items.insert(0, version);
     let refs = items
         .iter()
         .map(|m| m as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
@@ -740,7 +776,7 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _, event| {
                     if event.state() == ShortcutState::Pressed {
-                        show_chat(app);
+                        let _ = activate(app);
                     }
                 })
                 .build(),
@@ -777,6 +813,7 @@ pub fn run() {
                 path,
                 load_error: Mutex::new(error),
                 shortcut_warning: Mutex::new(warning),
+                tested_destination: Mutex::new(None),
                 hidden: AtomicBool::new(false),
                 pending: Mutex::new(None),
                 update_lock: tokio::sync::Mutex::new(()),
@@ -786,7 +823,9 @@ pub fn run() {
                 last_move: Mutex::new(std::time::Instant::now()),
             });
             app.manage(chat::Chat::default());
-            chat_monitor(app.handle().clone());
+            if chat::enabled() {
+                chat_monitor(app.handle().clone());
+            }
             let pet = app.get_webview_window("companion").unwrap();
             pet.set_size(LogicalSize::new(p.size as f64, p.size as f64 + 20.))?;
             set_floating(&pet, p.always_on_top)?;
@@ -802,7 +841,7 @@ pub fn run() {
                 pet.show()?;
             }
             if !manual_install
-                && (!p.verified || app.state::<AppState>().load_error.lock().unwrap().is_some())
+                && (p.needs_setup() || app.state::<AppState>().load_error.lock().unwrap().is_some())
             {
                 show_settings(app.handle());
             }
@@ -873,12 +912,13 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(Duration::from_secs(30)).await;
                 loop {
-                    if handle
-                        .state::<AppState>()
-                        .preferences
-                        .lock()
-                        .unwrap()
-                        .auto_check
+                    if updates::configured(&handle)
+                        && handle
+                            .state::<AppState>()
+                            .preferences
+                            .lock()
+                            .unwrap()
+                            .auto_check
                     {
                         let status = match updates::check(&handle, false).await {
                             Ok(s) => s,

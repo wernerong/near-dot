@@ -13,10 +13,49 @@ Near Dot's goal is two-way chat with the user's existing dot, incoming reply bub
 | Sign in with ChatGPT | Identity and separately authorized eligible Responses API usage. | Does not grant ChatGPT conversation access. |
 | Conversations/Responses API | Developer-managed API conversation state. | No mapping to the existing dot established. A separate assistant is excluded from this product goal. |
 | Codex CLI/App Server | Codex agent threads. Installed CLI help and generated schemas were inspected. | No existing-dot method established. The successful proof used the separate official tunnel client. |
+| Enterprise-managed MCP lifecycle hooks | Official documentation supports remote MCP hooks for dots when managed policy and remote hooks are enabled. `UserPromptSubmit` and `Stop` are documented lifecycle events. | Candidate for future-message capture, not live-proven here. Personal accounts are explicitly excluded. Cloud payload fields, event coverage, replay, latency and consumer availability require verification. |
+| MCP App model-context extensions | Official SDK exposes app context updates and current app context; an embedded component can send user follow-ups to its active chat. | App-state sharing is not a conversation-message feed. The SDK does not establish an external desktop transcript subscription. |
 
 The tested route is local message → signed subscribed event → existing dot read tool → existing dot reply tool → local reply. The browser was used for setup and independent verification, not to carry test messages. An acknowledged webhook was never counted as a reply. The original dot independently reported the first two exact message IDs and replies from its tool activity without being given those values in the audit prompt.
 
 The relay can store and retrieve its own exchanges. One successful recall demonstrates continuity in the tested setup; it does not establish reliable access to every previous ChatGPT message or full shared memory. Keep those claims separate.
+
+## Live ChatGPT conversation sync: blocked
+
+Rechecked 4 October 2026 after a device report of missing ChatGPT-origin messages and separate companion history. The existing-dot reply proof does **not** satisfy this requirement.
+
+The current reply tool accepts only a reply to an already queued Near Dot message ID. The desktop adapter reads the local relay mailbox, not a ChatGPT transcript. Its two-second active / ten-second inactive local refresh adds display latency, but reducing it cannot retrieve missing ChatGPT messages. No ChatGPT-origin message listener, unsolicited-message tool, transcript cursor, or streamed reply transport is implemented.
+
+The official sources checked establish these boundaries:
+
+- [MCP Events](https://developers.openai.com/plugins/build/mcp-events) delivers external-server events into the subscribed ChatGPT chat. Receipt is asynchronous; this integration does not support the draft's streaming delivery. This does not establish an outgoing ChatGPT transcript feed or token stream.
+- [Message your dot](https://learn.chatgpt.com/docs/dots/channels) describes the same dot across contact methods, but explicitly says Slack and Teams histories do not mirror every message from other channels. Relevant context across channels is different from identical transcripts.
+- [MCP App UI](https://developers.openai.com/plugins/build/chatgpt-ui) documents host-contained components, tool results and follow-up messages. [Plugin Extensions](https://developers.openai.com/plugins/build/extensions) describes model/app context sharing. These pages do not establish an external desktop application's right to subscribe to the entire dot conversation.
+- [Workspace Agent triggers](https://developers.openai.com/workspace-agents/trigger-runs) target published workspace agents; the documentation says the agent response cannot currently be retrieved through that API. No mapping to a personal existing dot was established.
+- [Compliance records](https://learn.chatgpt.com/docs/enterprise/compliance-api) require administrative access and serve audit/investigation workflows. This does not establish a consumer two-way dot chat API.
+- [API conversation state](https://developers.openai.com/api/docs/guides/conversation-state) manages API conversations; no mapping to an existing ChatGPT dot was established.
+
+Unblocking the requested experience requires a documented, authorized connection to the existing dot that can receive ChatGPT-origin messages, submit messages into the same conversation, retrieve/replay history with stable IDs, and support measured live delivery. Test messages in both interfaces, reconnect and missed-event recovery, duplicate handling, and independent transcript comparison before claiming synchronization. Token streaming requires its own supported contract and evidence.
+
+A model voluntarily copying selected messages through a new MCP tool could be a separate forwarding feature. It would not establish automatic or complete sync and must not be presented as this requirement's completion. No substitute assistant, browser scraping, session-token reuse, or private backend route is permitted.
+
+### Strongest remaining candidate: managed lifecycle hooks
+
+The [Hooks documentation](https://learn.chatgpt.com/docs/hooks#managed-hooks-from-requirementstoml) and [cloud local-access guide](https://learn.chatgpt.com/docs/enterprise/cloud-local-access) explicitly describe admin-managed remote MCP hooks on the cloud orchestrator for dots. They explicitly exclude personal accounts and plugin/local-directory hooks in cloud orchestration. Installing a local Codex hook cannot enable this on a personal dot.
+
+The lifecycle documentation describes `UserPromptSubmit` with `prompt`, and `Stop` with `last_assistant_message`; `turn_id` is described as Codex-specific. These are a reason to investigate completed-message capture for an eligible dot, not proof of the cloud dot payload contract. Do not enable workspace-wide capture or assume Codex transcript files are dot history. Account/workspace eligibility has not been established for this device.
+
+An eligible administrator-reviewed experiment must first establish:
+
+1. A dot-scoped policy and authenticated MCP receiver that excludes unrelated chats and subagents. Do not change global policy or grant new access without review.
+2. Actual cloud payloads for a non-sensitive ChatGPT-origin prompt and its completed reply. Record only private, owner-approved test evidence; stable conversation/turn identifiers must come from the supported contract.
+3. A companion-origin message reaching the same dot conversation through the existing event connection, followed by hook receipt and independent comparison in both interfaces. Tool activity alone does not prove identical visible transcripts.
+4. Duplicate/out-of-order handling, disconnect/reconnect, a deliberately missed event, and documented recovery. Hook delivery errors can fail without blocking work; documentation says hooks are not a complete compliance audit trail. Lossless replay cannot be assumed.
+5. Measured end-to-end delay. Completed-turn hooks do not establish token streaming. Older-history backfill and rich messages need separate documented access.
+
+If the existing dot is personal, this candidate cannot run under the checked contract. The remaining consumer integration dependency is an OpenAI-supported, per-user dot channel with scoped message send/read, stable IDs, incoming-message subscription and replay/history access. Request access to that contract through an authorized provider contact before claiming a consumer sync product. No provider message has been sent and no external service enabled.
+
+The package `@openai/mcp-extensions` 0.1.0 was inspected without installing or executing it. Its `modelContext.getCurrent()` reads the MCP App's `openai/modelContext` host state; `update()` updates that app context. Its message API sends a user message to the active or a new conversation. These APIs do not supply the missing outgoing dot transcript feed.
 
 ## Next implementation gates
 

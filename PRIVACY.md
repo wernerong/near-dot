@@ -1,6 +1,6 @@
 # Privacy
 
-The launcher stores preferences, your destination and an optional companion image on the current device. It does not collect telemetry, capture screens/audio or record keystrokes. The optional private chat preview additionally stores its own messages and replies locally and uses a separately authorized OpenAI MCP connection, as described below. It does not poll ChatGPT conversations or global dot activity.
+The launcher stores preferences, your destination and an optional companion image on the current device. It does not collect telemetry, capture screens/audio or record keystrokes. Public installers contain no private relay scripts and do not start Python/tunnel helpers. The explicitly enabled private development build additionally stores its own messages and replies locally and uses a separately authorized OpenAI MCP connection, as described below. It does not poll ChatGPT conversations or global dot activity.
 
 Choosing a local PNG uses a native file picker. Rust reads only the selected file, enforces file/pixel limits, strips metadata by decoding and re-encoding pixels, and saves `avatar.png` in the per-user app configuration directory. The renderer receives only that normalized image; it receives no source file path. There are no image uploads, external image URLs or ChatGPT profile requests. Restoring the default preserves the previous image in that private directory. Treat both image and backup as private and remove them during complete local data removal.
 

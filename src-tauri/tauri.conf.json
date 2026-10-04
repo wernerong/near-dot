@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Near Dot",
-  "version": "0.2.0-preview.1",
+  "version": "0.3.0-preview.1",
   "identifier": "org.neardot.companion",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -84,12 +84,16 @@
       "nsis": {
         "installMode": "currentUser",
         "installerHooks": "windows-uninstall.nsh"
+      },
+      "allowDowngrades": false,
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
       }
     },
-    "resources": {
-      "../experiments/dot-relay/desktop.py": "relay/desktop.py",
-      "../experiments/dot-relay/relay.py": "relay/relay.py",
-      "../experiments/dot-relay/connect.py": "relay/connect.py"
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "hardenedRuntime": true
     }
   },
   "plugins": {
@@ -98,7 +102,8 @@
       "endpoints": [],
       "windows": {
         "installMode": "passive"
-      }
+      },
+      "requireSignedVersion": true
     }
   }
 }

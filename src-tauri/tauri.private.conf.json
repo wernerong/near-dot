@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "resources": {
+      "../experiments/dot-relay/desktop.py": "relay/desktop.py",
+      "../experiments/dot-relay/relay.py": "relay/relay.py",
+      "../experiments/dot-relay/connect.py": "relay/connect.py"
+    }
+  }
+}

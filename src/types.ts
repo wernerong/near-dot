@@ -1,7 +1,11 @@
+import pkg from "../package.json" with { type: "json" };
+const { version } = pkg;
+
 export interface Preferences {
   schema: number;
   destination: string;
   verified: boolean;
+  setupCompleted: boolean;
   shortcut: string;
   size: number;
   opacity: number;
@@ -20,6 +24,7 @@ export const defaults: Preferences = {
   schema: 1,
   destination: "",
   verified: false,
+  setupCompleted: false,
   shortcut: "CommandOrControl+Shift+D",
   size: 156,
   opacity: 1,
@@ -29,7 +34,7 @@ export const defaults: Preferences = {
   startup: false,
   autoCheck: true,
   unattendedNextLaunch: false,
-  channel: "stable",
+  channel: version.includes("-") ? "preview" : "stable",
   skippedVersion: "",
   position: null,
   cohort: 0,
@@ -39,9 +44,12 @@ export interface Snapshot {
   warning: string | null;
   version: string;
   updatesConfigured: boolean;
+  setupRequired: boolean;
+  chatEnabled: boolean;
   updateStatus: UpdateStatus | null;
 }
 export interface Companion {
+  chatEnabled: boolean;
   alwaysOnTop: boolean;
   size: number;
   opacity: number;

@@ -9,14 +9,14 @@ The user has explicitly authorized a public repository and initial release. Vers
 1. Choose a public repository identity and final app bundle ID. Review all tracked files, artwork, screenshots, lockfiles and examples. Keep destination URLs and identities local. Run Gitleaks over files and history, `scan-public.py`, npm audit, cargo audit and third-party license checks. Do not reuse any usage-widget secrets/configuration.
 2. Protect main, release tags, CODEOWNERS and `.github/workflows/*`. Require review and passing CI. Add real CODEOWNERS privately during repository setup. Enable GitHub secret scanning/push protection, private security reporting and immutable releases where available. Confirm any paid account features before enabling them.
 3. Create a protected `release` environment restricted to main, with required human reviewers and no self-review. Signing keys must never be available to pull-request jobs. CI permissions are read-only; draft job permissions are limited to Releases and provenance.
-4. Obtain Windows Authenticode signing after cost/identity approval. This workflow accepts a protected PFX; production teams may substitute a reviewed hardware/cloud sign command. Do not place the PFX or its password in the client or source. Signing does not guarantee SmartScreen reputation. For Mac public distribution, obtain Developer ID and notarization credentials separately; Mac publication is not configured in the initial Windows draft workflow.
+4. Obtain Windows Authenticode signing after cost/identity approval. This workflow accepts a protected PFX; production teams may substitute a reviewed hardware/cloud sign command. Do not place the PFX or its password in the client or source. Signing does not guarantee SmartScreen reputation. For Mac public distribution, obtain Developer ID and notarization credentials separately. The desktop draft workflow now prepares both Apple Silicon and Intel builds, but has not been executed with production credentials.
 5. Generate a Tauri updater key in an approved secure signing environment. Back up the encrypted private key offline with access controls. Protect `TAURI_SIGNING_PRIVATE_KEY`, its password, `WINDOWS_SIGNING_PFX_BASE64` and `WINDOWS_SIGNING_PASSWORD` as release-environment secrets. Store only `NEAR_DOT_UPDATER_PUBLIC_KEY` as the verification public-key variable. A repository token is scoped to the workflow, never embedded in the app.
 
 The checked Tauri updater uses mandatory artifact signatures; updater signing and Windows Authenticode are independent. [Tauri updater](https://v2.tauri.app/plugin/updater/), [Windows signing](https://v2.tauri.app/distribute/sign/windows/)
 
 ## Build a reviewable candidate
 
-Keep `package.json`, `src-tauri/Cargo.toml` and `tauri.conf.json` versions in sync. Write `docs/releases/VERSION.md`. Run CI and the acceptance matrix on actual target hardware. Create a reviewed version tag; do not silently retag it.
+Run `npm run version:set -- VERSION` to stamp `package.json`, both npm lock entries, `src-tauri/Cargo.toml`, `Cargo.lock` and `tauri.conf.json` together. `npm run version:check` runs before every frontend/package build and rejects drift. Write `docs/releases/VERSION.md`. Run CI and the acceptance matrix on actual target hardware. Create a reviewed version tag; do not silently retag it.
 
 For a local approved signing environment:
 
@@ -30,7 +30,13 @@ npm run tauri -- build --target x86_64-pc-windows-msvc --bundles nsis --config r
 
 `NEAR_DOT_UPDATE_REPO` must be present during Rust compilation as well as config generation. Rust pins that repository at compile time. The generated config is ignored by Git. The workflow refuses unsigned release builds and verifies Authenticode on the installer. Architecture-specific filenames include `windows-x86_64`; signed package identity is also bound by the signed channel file and SHA-256.
 
-The manual **Prepare signed Windows draft** workflow builds a reviewed ancestor tag, runs checks, signs the executable/installer, generates a paused 0%-rollout feed, signs that feed, computes checksums, attests provenance and creates a draft GitHub Release. It does not publish or activate the channel. It has not been executed in this task.
+The manual **Prepare signed desktop draft** workflow resolves a reviewed ancestor tag to an exact commit before any signing job. Protected jobs run checks and build Windows x64, Mac arm64 and Mac Intel. Mac builds require Developer ID signing, hardened runtime and notarization/stapling for the app and DMG; versions and executable architectures are checked. Windows checks Authenticode on app and installer. All three platform updater packages and both DMGs must exist before aggregation. The draft job verifies every signature against the shipped public key, generates a paused 0%-rollout feed, signs it, computes checksums, attests provenance and creates a draft GitHub Release. It does not publish or activate the channel. Production signing jobs have not been executed in this task.
+
+Protected Mac secrets: `APPLE_CERTIFICATE` (base64 P12), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` (Developer ID Application), `APPLE_API_ISSUER`, `APPLE_API_KEY` and `APPLE_API_PRIVATE_KEY` (P8 contents). The P8 is staged with 0600 permissions in a temporary directory and removed at job end. Tauri handles the temporary signing keychain. Signing credentials are injected only into the build step. Keep secrets masked and do not upload raw notarization logs.
+
+Public installers use the default Cargo feature set; never add `private-relay` or merge `tauri.private.conf.json` into a release. The prepared launcher is not the requested realtime-chat product. Before claiming that capability or advertising a permanent dot connection, resolve the documented provider/account/expiry blockers and prove real ChatGPT-origin messages and history sync.
+
+Expected artifacts: `NearDot-VERSION-windows-x86_64.exe` plus `.sig`; `NearDot-VERSION-darwin-aarch64.dmg` and `.app.tar.gz` plus `.sig`; Intel equivalents with `darwin-x86_64`; signed `preview.json` or `stable.json`; `SHA256SUMS.txt` and GitHub provenance. Users install the EXE/DMG, while the Mac updater consumes the signed `.app.tar.gz`.
 
 ## Review, publish and roll out
 
@@ -44,6 +50,7 @@ Keep mutable signed channel controls under `channels/stable.json` and `channels/
 node scripts/make-feed.mjs release-artifacts OWNER/REPOSITORY stable 5
 # Generated feeds intentionally start paused. Review and set paused=false locally.
 npm run tauri -- signer sign release-artifacts/stable.json
+node scripts/verify-signatures.mjs release-artifacts
 node scripts/checksums.mjs release-artifacts
 ```
 
@@ -51,7 +58,7 @@ The `.sig` is Tauri CLI's base64-encoded Minisign signature, not a filename. Onl
 
 ## Update behavior
 
-Checks start after 30 seconds and repeat every six hours. Users can check manually, disable automatic checks, defer, skip or request installation. Errors do not install anything. Metadata URLs and redirects must use HTTPS and trusted GitHub hosts. Tauri verifies package signatures; the signed feed additionally binds artifact checksum, architecture, channel and newer version. No downgrade comparator is installed.
+Checks start after 30 seconds and repeat every six hours. Users can check manually, disable automatic checks, defer, skip or request installation. Errors do not install anything. Metadata URLs and redirects must use HTTPS and trusted GitHub hosts. Tauri verifies package signatures and requires a signed version matching the announced version; the signed feed additionally binds artifact checksum, architecture, channel and newer version. No downgrade comparator is installed.
 
 Unattended mode is an explicit one-time opt-in for the next **manual app launch**, before showing the companion. Login startup and an already-running companion never install automatically. The opt-in clears before the attempt so restart cannot loop. OS approval is not bypassed. `--no-unattended` bypasses it for that launch; uncheck the option in Settings to cancel permanently. This behavior must be verified with signed installers before publication.
 

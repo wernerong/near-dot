@@ -1,24 +1,144 @@
-name: Prepare signed Windows draft
+name: Prepare signed desktop draft
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Reviewed existing version tag, e.g. v0.1.0"
+        description: "Reviewed existing version tag, e.g. v0.3.0-preview.1"
         required: true
       channel:
         type: choice
-        options: [stable, preview]
-        default: stable
+        options: [preview, stable]
+        default: preview
 permissions:
   contents: read
 concurrency:
   group: signed-release
   cancel-in-progress: false
 jobs:
-  draft:
+  prepare:
     if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.tag.outputs.commit }}
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_CHANNEL: ${{ inputs.channel }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.22.2"
+      - name: Select reviewed ancestor tag and pin its commit
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
+          git merge-base --is-ancestor "$RELEASE_TAG" HEAD
+          candidate_commit=$(git rev-parse "$RELEASE_TAG^{commit}")
+          git checkout --detach "$candidate_commit"
+          node scripts/versions.mjs
+          node --input-type=module -e 'import fs from "node:fs"; const v=JSON.parse(fs.readFileSync("package.json")).version; if(process.env.RELEASE_TAG!==`v${v}` || (process.env.RELEASE_CHANNEL==="stable" && v.includes("-")) || !fs.existsSync(`docs/releases/${v}.md`)) throw Error("Release version/channel/notes mismatch");'
+          printf 'commit=%s\n' "$candidate_commit" >> "$GITHUB_OUTPUT"
+  build:
+    needs: prepare
     environment: release
-    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            platform: windows-x86_64
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: darwin-aarch64
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            platform: darwin-x86_64
+    runs-on: ${{ matrix.os }}
+    env:
+      NEAR_DOT_UPDATE_REPO: ${{ github.repository }}
+      NEAR_DOT_UPDATER_PUBLIC_KEY: ${{ vars.NEAR_DOT_UPDATER_PUBLIC_KEY }}
+      RELEASE_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22.22.2"
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d
+        with:
+          toolchain: "1.95.0"
+          components: clippy, rustfmt
+      - run: npm ci
+      - run: npm run check
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - run: npm audit --audit-level=moderate
+      - run: cargo install cargo-audit --version 0.22.2 --locked
+      - run: cargo audit --file src-tauri/Cargo.lock
+      - run: python scripts/scan-public.py
+      - run: python scripts/run-gitleaks.py
+      - run: npx playwright install chromium
+      - run: npm run test:ui
+      - name: Generate public configuration
+        run: npm run release:config
+      - name: Build and verify Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          WINDOWS_SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_SIGNING_PFX_BASE64 -or -not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Protected signing is required.' }
+          $env:NEAR_DOT_PFX_PATH = Join-Path $env:RUNNER_TEMP 'near-dot-signing.pfx'
+          try {
+            [IO.File]::WriteAllBytes($env:NEAR_DOT_PFX_PATH, [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_BASE64))
+            npm run tauri -- build --ci --target $env:RELEASE_TARGET --bundles nsis --config release-config.json
+            if ($LASTEXITCODE -ne 0) { throw 'Signed build failed.' }
+            New-Item -ItemType Directory release-artifacts -Force | Out-Null
+            $version = (Get-Content package.json | ConvertFrom-Json).version
+            $installers = @(Get-ChildItem "src-tauri/target/$env:RELEASE_TARGET/release/bundle/nsis/*-setup.exe")
+            if ($installers.Count -ne 1) { throw 'Expected one installer.' }
+            $installer = $installers[0]
+            if ((Get-AuthenticodeSignature $installer.FullName).Status -ne 'Valid') { throw 'Installer Authenticode verification failed.' }
+            $binary = "src-tauri/target/$env:RELEASE_TARGET/release/near-dot.exe"
+            if ((Get-AuthenticodeSignature $binary).Status -ne 'Valid') { throw 'App Authenticode verification failed.' }
+            $numericVersion = $version.Split('-')[0]
+            if (-not (Get-Item $binary).VersionInfo.ProductVersion.StartsWith($numericVersion)) { throw 'Windows version stamp mismatch.' }
+            Copy-Item $installer.FullName "release-artifacts/NearDot-$version-windows-x86_64.exe"
+            Copy-Item ($installer.FullName + '.sig') "release-artifacts/NearDot-$version-windows-x86_64.exe.sig"
+          } finally { Remove-Item $env:NEAR_DOT_PFX_PATH -Force -ErrorAction SilentlyContinue }
+      - name: Build and verify Mac app, installer and updater
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: python3 scripts/prepare-mac-release.py "$RELEASE_TARGET"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signed-${{ matrix.platform }}
+          path: release-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+  draft:
+    needs: [prepare, build]
+    environment: release
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       id-token: write
@@ -31,70 +151,38 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          fetch-depth: 0
-      - name: Validate and select reviewed tag
-        shell: pwsh
-        run: |
-          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$') { throw 'Invalid release tag.' }
-          git merge-base --is-ancestor $env:RELEASE_TAG HEAD
-          if ($LASTEXITCODE -ne 0) { throw 'Tag must be a reviewed ancestor of main.' }
-          git checkout --detach $env:RELEASE_TAG
-          if ($LASTEXITCODE -ne 0) { throw 'Tag checkout failed.' }
-          $version = (Get-Content package.json | ConvertFrom-Json).version
-          if ($env:RELEASE_TAG -ne "v$version") { throw 'Version/tag mismatch.' }
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22.22.2"
-      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d
-        with:
-          toolchain: "1.95.0"
       - run: npm ci
-      - run: npm run check
-      - run: npm audit --audit-level=moderate
-      - run: cargo install cargo-audit --version 0.22.2 --locked
-      - run: cargo audit --file src-tauri/Cargo.lock
-      - run: python scripts/scan-public.py
-      - run: python scripts/run-gitleaks.py
-      - name: Generate public configuration
-        run: npm run release:config
-      - name: Build and verify signed packages
-        shell: pwsh
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: signed-*
+          path: release-artifacts
+          merge-multiple: true
+      - name: Sign paused feed and compute checksums
         env:
-          WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
-          WINDOWS_SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          if (-not $env:WINDOWS_SIGNING_PFX_BASE64 -or -not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Protected release signing is required.' }
-          $env:NEAR_DOT_PFX_PATH = Join-Path $env:RUNNER_TEMP 'near-dot-signing.pfx'
-          try {
-            [IO.File]::WriteAllBytes($env:NEAR_DOT_PFX_PATH, [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_BASE64))
-            npm run tauri -- build --target x86_64-pc-windows-msvc --bundles nsis --config release-config.json
-            if ($LASTEXITCODE -ne 0) { throw 'Signed build failed.' }
-            New-Item -ItemType Directory release-artifacts -Force | Out-Null
-            $version = (Get-Content package.json | ConvertFrom-Json).version
-            $installer = Get-ChildItem src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe | Select-Object -First 1
-            if (-not $installer -or (Get-AuthenticodeSignature $installer.FullName).Status -ne 'Valid') { throw 'Installer Authenticode verification failed.' }
-            Copy-Item $installer.FullName "release-artifacts/NearDot-$version-windows-x86_64.exe"
-            Copy-Item ($installer.FullName + '.sig') "release-artifacts/NearDot-$version-windows-x86_64.exe.sig"
-            node scripts/make-feed.mjs release-artifacts $env:NEAR_DOT_UPDATE_REPO $env:RELEASE_CHANNEL 0
-            if ($LASTEXITCODE -ne 0) { throw 'Feed generation failed.' }
-            npm run tauri -- signer sign "release-artifacts/$env:RELEASE_CHANNEL.json"
-            if ($LASTEXITCODE -ne 0) { throw 'Feed signing failed.' }
-            node scripts/checksums.mjs release-artifacts
-          } finally { Remove-Item $env:NEAR_DOT_PFX_PATH -Force -ErrorAction SilentlyContinue }
+          set -euo pipefail
+          node scripts/make-feed.mjs release-artifacts "$NEAR_DOT_UPDATE_REPO" "$RELEASE_CHANNEL" 0 --require-all
+          npm run tauri -- signer sign "release-artifacts/$RELEASE_CHANNEL.json"
+          node scripts/verify-signatures.mjs release-artifacts
+          node scripts/checksums.mjs release-artifacts
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: "release-artifacts/*"
       - name: Create draft for final public review
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $version = (Get-Content package.json | ConvertFrom-Json).version
-          if ($env:RELEASE_CHANNEL -eq 'preview') {
-            gh release create $env:RELEASE_TAG release-artifacts/* --verify-tag --draft --prerelease --title "Near Dot $version preview" --notes-file "docs/releases/$version.md"
-          } else {
-            gh release create $env:RELEASE_TAG release-artifacts/* --verify-tag --draft --title "Near Dot $version" --notes-file "docs/releases/$version.md"
-          }
-          if ($LASTEXITCODE -ne 0) { throw 'Draft release creation failed.' }
+          set -euo pipefail
+          version=$(node --input-type=module -e 'import {checkVersions} from "./scripts/versions.mjs"; console.log(checkVersions());')
+          if [[ "$RELEASE_CHANNEL" == 'preview' ]]; then
+            gh release create "$RELEASE_TAG" release-artifacts/* --verify-tag --draft --prerelease --title "Near Dot $version preview" --notes-file "docs/releases/$version.md"
+          else
+            gh release create "$RELEASE_TAG" release-artifacts/* --verify-tag --draft --title "Near Dot $version" --notes-file "docs/releases/$version.md"
+          fi

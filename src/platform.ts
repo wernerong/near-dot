@@ -1,4 +1,5 @@
-import { version } from "../package.json";
+import pkg from "../package.json" with { type: "json" };
+const { version } = pkg;
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { defaults, type Snapshot } from "./types";
@@ -16,10 +17,18 @@ export async function call<T = void>(
       warning: null,
       version,
       updatesConfigured: false,
+      setupRequired:
+        !previewPreferences.setupCompleted && !previewPreferences.verified,
+      chatEnabled: false,
       updateStatus: null,
     } satisfies Snapshot as T;
   if (command === "get_companion")
-    return { ...previewPreferences, hidden: false, configured: false } as T;
+    return {
+      ...previewPreferences,
+      hidden: false,
+      configured: false,
+      chatEnabled: false,
+    } as T;
   if (command === "get_chat")
     return {
       connected: false,

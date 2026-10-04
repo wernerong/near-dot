@@ -1,16 +1,18 @@
 {
   "name": "near-dot",
-  "version": "0.2.0-preview.1",
+  "version": "0.3.0-preview.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run version:check && tsc --noEmit && vite build",
     "test": "vitest run",
     "test:ui": "playwright test",
     "tauri": "tauri",
     "check": "npm run build && npm test && cargo test --manifest-path src-tauri/Cargo.toml --locked",
-    "release:config": "node scripts/release-config.mjs"
+    "release:config": "node scripts/release-config.mjs",
+    "version:check": "node scripts/versions.mjs",
+    "version:set": "node scripts/versions.mjs --set"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.1"

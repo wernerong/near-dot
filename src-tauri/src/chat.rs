@@ -12,6 +12,17 @@ use std::{
 };
 use tauri::Manager;
 
+pub fn enabled() -> bool {
+    cfg!(all(feature = "private-relay", target_os = "macos"))
+}
+fn require_private() -> Result<(), String> {
+    if enabled() {
+        Ok(())
+    } else {
+        Err("Desktop chat and ChatGPT history sync are unavailable in this public preview.".into())
+    }
+}
+
 #[derive(Clone, Default, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Message {
@@ -62,6 +73,7 @@ impl Drop for Bridge {
 }
 impl Bridge {
     fn start(app: &tauri::AppHandle) -> Result<Self, String> {
+        require_private()?;
         if !cfg!(target_os = "macos") {
             return Err(
                 "Private chat is currently available only on the configured test Mac.".into(),
@@ -151,6 +163,7 @@ impl Chat {
         }
     }
     pub fn connect(&self, app: &tauri::AppHandle) -> Result<(), String> {
+        require_private()?;
         if !cfg!(target_os = "macos") {
             return Err(
                 "Private chat is currently available only on the configured test Mac.".into(),
@@ -323,6 +336,7 @@ impl Chat {
         app: &tauri::AppHandle,
         request: serde_json::Value,
     ) -> Result<Snapshot, String> {
+        require_private()?;
         let mut bridge = self.bridge.lock().unwrap();
         if bridge.is_none() {
             *bridge = Some(Bridge::start(app)?);

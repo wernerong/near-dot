@@ -146,6 +146,39 @@ h1 {
   padding: 23px 24px 0;
   box-shadow: 0 2px 6px #33423303;
 }
+.setup-guide {
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  background: #edf1e7;
+  border-radius: 12px;
+}
+.setup-guide p,
+.scope-notice {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.scope-notice {
+  color: #526550;
+  margin-bottom: 20px;
+}
+.setup-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.setup-steps [aria-current="step"] {
+  font-weight: 700;
+  color: #284f3d;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.setup-navigation {
+  display: flex;
+  gap: 10px;
+}
 .section-heading {
   display: flex;
   gap: 12px;

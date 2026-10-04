@@ -36,13 +36,22 @@ test("setup exposes its boundary and rejects unsafe destinations", async ({
   await expect(page.getByLabel("I tested this link")).not.toBeChecked();
   await expect(page.locator("#status")).toContainText("Use Test link");
 });
-test("settings save locally in inert preview and update failure is honest", async ({
+test("inert preview rejects unfinished setup and reports update failure", async ({
   page,
 }) => {
   await page.goto("/");
+  await page.locator("#setup-look").evaluate((e) => {
+    (e as HTMLElement).hidden = false;
+  });
+  await page.locator("#setup-updates").evaluate((e) => {
+    (e as HTMLElement).hidden = false;
+  });
+  await page.locator("#save").evaluate((e) => {
+    (e as HTMLElement).hidden = false;
+  });
   await page.getByLabel("Pause animation", { exact: true }).check();
-  await page.getByRole("button", { name: "Save settings" }).click();
-  await expect(page.locator("#status")).toContainText("Saved on this device.");
+  await page.getByRole("button", { name: "Finish setup" }).click();
+  await expect(page.locator("#status")).toContainText("Test and confirm");
   await page.getByRole("button", { name: "Check for updates" }).click();
   await expect(page.locator("#update-status")).toContainText(
     "Browser preview only.",
@@ -61,7 +70,7 @@ test("keyboard setup, reduced motion and public screenshot", async ({
   await expect(page.getByRole("button", { name: "Test link" })).toBeFocused();
   await page.screenshot({ path: "docs/settings-preview.png", fullPage: true });
   await page.goto("/?view=companion");
-  await expect(page.locator("#pet")).toHaveAccessibleName("Chat with my dot");
+  await expect(page.locator("#pet")).toHaveAccessibleName("Open my dot");
   expect(
     await page
       .locator(".pet")
@@ -78,6 +87,9 @@ test("local image setup states privacy and does not invent dot activity", async 
   page,
 }) => {
   await page.goto("/");
+  await page.locator("#setup-look").evaluate((e) => {
+    (e as HTMLElement).hidden = false;
+  });
   await expect(
     page.getByText("Idle movement is decorative.", { exact: false }),
   ).toBeVisible();
@@ -180,6 +192,9 @@ test("floating defaults on and pet import is available in settings", async ({
   page,
 }) => {
   await page.goto("/");
+  await page.locator("#setup-look").evaluate((e) => {
+    (e as HTMLElement).hidden = false;
+  });
   await expect(page.getByLabel("Always on top", { exact: true })).toBeChecked();
   await page
     .getByRole("button", { name: "Import pet sprite sheet", exact: true })

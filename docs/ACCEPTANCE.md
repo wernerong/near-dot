@@ -73,3 +73,29 @@ The chat build exceeds the main-process memory budget. These samples exclude Web
 | Clean uninstall and data/startup cleanup | Untested | Instructions only | Recipe removal untested |
 
 Windows remains the first planned public installer target. Mac private chat does not establish general account eligibility, key renewal, long-duration reliability, full history, global task state, voice or automatic image sync. Complete [release drills](RELEASE.md), artifact/privacy/license review and remaining device checks before a public binary release.
+
+## 0.3.0-preview.1 release preparation
+
+This is a locally prepared candidate, not a public binary release. The previous native private-chat observations above remain historical evidence; they do not establish the public preview’s live chat or history sync. The requested realtime ChatGPT conversation goal remains blocked.
+
+| Candidate check | Result and boundary |
+| --- | --- |
+| Production frontend and version drift | Passed; package, Tauri, Cargo and both lockfiles agree on 0.3.0-preview.1. |
+| TypeScript tests | 18 passed, including complete platform feed requirements and release signature/version substitution checks. |
+| Rust tests | 15 passed, including fresh/incomplete/completed setup persistence and verified legacy migration. Corrupt/future files remain preserved. |
+| Browser UI | 10 passed; first-run/reopen uses explicitly synthetic IPC/preferences, not a live ChatGPT or OS-launch test. Existing axe and keyboard checks passed. |
+| Private relay regression | 24 passed. Explicit `private-relay` feature compiles on this Mac; no new live message exchange was claimed. |
+| Rust lint/format | Clippy with warnings denied and rustfmt passed. |
+| Signature compatibility | Actual pinned Tauri CLI generated an ephemeral key and version-bound signature. Release verifier accepted it and rejected altered bytes; temporary keys were removed. This is not a signed installer upgrade. |
+| Workflow review | Checksum-verified actionlint 1.7.12 passed both desktop workflows, including current Intel/ARM runner labels. No production signing workflow was dispatched. |
+| Secret/privacy scans | Public-source guard and Gitleaks source/history checks passed. Original-art screenshots only; personal links/images remain excluded. |
+| Dependency audits | npm zero vulnerabilities using the system’s trusted CA bundle; Cargo retained the documented Linux-only warnings above. |
+| Mac arm64 packaging | Public `.app` and DMG built locally in Tauri CI mode (no Finder layout scripting). Bundle metadata stamps 0.3.0-preview.1, executable reports arm64, and no private relay resources are bundled. Local sizes: app about 15.6 MiB, DMG about 6.3 MiB. Development output has no Developer ID signing/notarization; zero valid local Developer ID identities were found. |
+| Windows x64 / Intel Mac installers | Workflow matrix prepared; this revision’s target builds/device execution have not been run here. Prior Windows/Mac CI applies to the earlier source only. |
+| Production automatic update service | Signing/public-key/feed infrastructure not activated. Signed feeds start paused/0%; installer signatures and signed version are mandatory. |
+| Fresh signed install, upgrade and recovery | Still required on Windows x64 and each supported Mac architecture, including settings preservation, tampering, interruption, restart, uninstall and OS protections. |
+| Current candidate performance / accessibility certification | Budgets above retained; current native performance, total helper/WebView footprint, VoiceOver/NVDA and focus soak still unmeasured. |
+
+The [onboarding screenshot](onboarding-preview.png) is labelled as a synthetic UI demonstration. It contains no personal URL or identity. [Installation instructions](INSTALL.md) describe the one-time per-device launcher setup and the circumstances that can require reauthentication or retesting a link. This does not promise a permanent authenticated dot connection.
+
+Do not claim stable public support for Windows or Mac until the signed device checklists pass. Publication, update-channel activation and signing/account costs remain behind final review.

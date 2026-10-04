@@ -1,18 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import { checkVersions } from "./versions.mjs";
 const repo = process.env.NEAR_DOT_UPDATE_REPO;
 const key = process.env.NEAR_DOT_UPDATER_PUBLIC_KEY;
-const version = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
-const tauriVersion = JSON.parse(
-  fs.readFileSync("src-tauri/tauri.conf.json", "utf8"),
-).version;
-const cargoVersion = fs
-  .readFileSync("src-tauri/Cargo.toml", "utf8")
-  .match(/^version\s*=\s*"([^"]+)"/m)?.[1];
-if (version !== tauriVersion || version !== cargoVersion)
-  throw new Error(
-    "Package, Tauri and Cargo versions must match before release.",
-  );
+checkVersions();
 if (!repo || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo))
   throw new Error(
     "Set NEAR_DOT_UPDATE_REPO to the reviewed public owner/repository.",
@@ -37,6 +28,7 @@ const config = {
   plugins: {
     updater: {
       pubkey: key,
+      requireSignedVersion: true,
       endpoints: [
         `https://raw.githubusercontent.com/${repo}/main/channels/stable.json`,
       ],

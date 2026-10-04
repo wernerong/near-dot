@@ -16,6 +16,18 @@ function fixture() {
   const dir = mkdtempSync(join(tmpdir(), "near-dot-release-test-"));
   mkdirSync(join(dir, "src-tauri"));
   copyFileSync(resolve("scripts/release-config.mjs"), join(dir, "config.mjs"));
+  copyFileSync(resolve("scripts/versions.mjs"), join(dir, "versions.mjs"));
+  writeFileSync(
+    join(dir, "package-lock.json"),
+    JSON.stringify({
+      version: "0.1.0",
+      packages: { "": { version: "0.1.0" } },
+    }),
+  );
+  writeFileSync(
+    join(dir, "src-tauri/Cargo.lock"),
+    '[[package]]\nname = "near-dot"\nversion = "0.1.0"\n',
+  );
   writeFileSync(
     join(dir, "package.json"),
     JSON.stringify({ version: "0.1.0" }),
@@ -53,6 +65,7 @@ it("release generator writes only a public verification key and pinned HTTPS fee
       readFileSync(join(dir, "release-config.json"), "utf8"),
     );
     expect(config.plugins.updater.pubkey).toBe(syntheticPublic);
+    expect(config.plugins.updater.requireSignedVersion).toBe(true);
     expect(config.plugins.updater.endpoints).toEqual([
       "https://raw.githubusercontent.com/example/near-dot/main/channels/stable.json",
     ]);
@@ -78,6 +91,19 @@ it("release generator blocks mismatched build versions", () => {
     writeFileSync(
       join(dir, "src-tauri/tauri.conf.json"),
       JSON.stringify({ version: "0.2.0" }),
+    );
+    expect(run(dir, syntheticPublic).status).not.toBe(0);
+    expect(existsSync(join(dir, "release-config.json"))).toBe(false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+it("release generator also blocks stale lockfiles", () => {
+  const dir = fixture();
+  try {
+    writeFileSync(
+      join(dir, "src-tauri/Cargo.lock"),
+      '[[package]]\nname = "near-dot"\nversion = "0.0.9"\n',
     );
     expect(run(dir, syntheticPublic).status).not.toBe(0);
     expect(existsSync(join(dir, "release-config.json"))).toBe(false);
