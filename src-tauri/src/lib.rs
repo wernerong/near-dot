@@ -1,4 +1,5 @@
 mod avatar;
+mod chat;
 mod destination;
 mod geometry;
 mod preferences;
@@ -59,7 +60,10 @@ fn get_avatar(w: WebviewWindow, app: tauri::AppHandle) -> Result<avatar::View, S
 }
 #[tauri::command]
 async fn import_avatar(w: WebviewWindow, app: tauri::AppHandle) -> Result<avatar::View, String> {
-    settings_only(&w)?;
+    known(&w)?;
+    if !["settings", "chat"].contains(&w.label()) {
+        return Err("Choose an image from Chat or Settings.".into());
+    }
     let state = app.state::<AppState>();
     let _operation = state.avatar_operation.lock().await;
     let (sender, receiver) = tokio::sync::oneshot::channel();
@@ -119,7 +123,7 @@ fn known(w: &WebviewWindow) -> Result<(), String> {
     if !local && !dev {
         return Err("OS actions require the packaged local UI.".into());
     }
-    if ["settings", "companion"].contains(&w.label()) {
+    if ["settings", "companion", "chat", "bubble"].contains(&w.label()) {
         Ok(())
     } else {
         Err("Unknown window.".into())
@@ -130,6 +134,237 @@ fn show_settings(app: &tauri::AppHandle) {
         let _ = w.show();
         let _ = w.set_focus();
     }
+}
+fn place_near_companion(app: &tauri::AppHandle, label: &str) {
+    let Some(pet) = app.get_webview_window("companion") else {
+        return;
+    };
+    let Some(panel) = app.get_webview_window(label) else {
+        return;
+    };
+    if let (Ok(pos), Ok(size), Ok(pet_size)) =
+        (pet.outer_position(), panel.outer_size(), pet.outer_size())
+    {
+        let gap = (12. * pet.scale_factor().unwrap_or(1.)) as i32;
+        let target = (
+            pos.x + pet_size.width as i32 - size.width as i32,
+            pos.y - size.height as i32 - gap,
+        );
+        let xy = geometry::recover(target, (size.width, size.height), &areas(&pet));
+        let _ = panel.set_position(PhysicalPosition::new(xy.0, xy.1));
+    }
+}
+fn show_latest_reply(app: &tauri::AppHandle) {
+    let reply = app
+        .state::<chat::Chat>()
+        .snapshot
+        .lock()
+        .unwrap()
+        .messages
+        .iter()
+        .rev()
+        .find_map(|m| m.reply.clone());
+    if let Some(reply) = reply {
+        let text: String = if app
+            .state::<AppState>()
+            .preferences
+            .lock()
+            .unwrap()
+            .reply_preview
+        {
+            reply.chars().take(160).collect()
+        } else {
+            "Your dot replied. Click to read and respond.".into()
+        };
+        let _ = app.emit_to("bubble", "reply-preview", serde_json::json!({"text":text}));
+        place_near_companion(app, "bubble");
+        if let Some(w) = app.get_webview_window("bubble") {
+            // Explicit menu/button action may focus a reply for keyboard access.
+            let _ = w.set_focusable(true);
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+    } else {
+        show_chat(app);
+    }
+}
+fn show_chat(app: &tauri::AppHandle) {
+    let _ = app.emit_to("companion", "reply-available", false);
+    if let Some(b) = app.get_webview_window("bubble") {
+        let _ = b.hide();
+    }
+    if let Some(w) = app.get_webview_window("chat") {
+        place_near_companion(app, "chat");
+        let _ = w.set_always_on_top(
+            app.state::<AppState>()
+                .preferences
+                .lock()
+                .unwrap()
+                .always_on_top,
+        );
+        let _ = w.show();
+        let _ = w.set_focus();
+        let _ = app.emit_to("chat", "chat-focus", ());
+    }
+}
+#[tauri::command]
+fn get_chat(w: WebviewWindow, app: tauri::AppHandle) -> Result<chat::Snapshot, String> {
+    known(&w)?;
+    if w.label() != "chat" {
+        return Err("Message history is available only in Chat.".into());
+    }
+    Ok(app.state::<chat::Chat>().snapshot.lock().unwrap().clone())
+}
+#[tauri::command]
+async fn send_chat(
+    w: WebviewWindow,
+    app: tauri::AppHandle,
+    text: String,
+) -> Result<chat::Snapshot, String> {
+    known(&w)?;
+    if w.label() != "chat" {
+        return Err("Send from the Chat window.".into());
+    }
+    chat::validate_message(&text)?;
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        handle.state::<chat::Chat>().request(
+            &handle,
+            serde_json::json!({"operation":"send", "text":text}),
+        )
+    })
+    .await
+    .map_err(|_| "Message could not be sent. Check saved messages before trying again.")?
+}
+#[tauri::command]
+async fn retry_chat(
+    w: WebviewWindow,
+    app: tauri::AppHandle,
+    message_id: String,
+) -> Result<chat::Snapshot, String> {
+    known(&w)?;
+    if w.label() != "chat"
+        || message_id.len() != 32
+        || !message_id.chars().all(|c| c.is_ascii_hexdigit())
+    {
+        return Err("Invalid local message.".into());
+    }
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        handle.state::<chat::Chat>().request(
+            &handle,
+            serde_json::json!({"operation":"retry", "messageId":message_id}),
+        )
+    })
+    .await
+    .map_err(|_| "Retry could not complete. Saved messages are preserved.")?
+}
+#[tauri::command]
+async fn connect_chat(w: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    known(&w)?;
+    if w.label() != "chat" {
+        return Err("Reconnect from Chat.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || app.state::<chat::Chat>().connect(&app))
+        .await
+        .map_err(|_| "Reconnect could not complete.")?
+}
+fn chat_monitor(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let mut initialized = false;
+        loop {
+            if app.state::<chat::Chat>().stopped() {
+                break;
+            }
+            let result = app
+                .state::<chat::Chat>()
+                .request(&app, serde_json::json!({"operation":"snapshot"}));
+            let snapshot = result.unwrap_or_else(|_| {
+                let chat = app.state::<chat::Chat>();
+                let mut saved = chat.snapshot.lock().unwrap();
+                saved.connected = false;
+                saved.state = "disconnected".into();
+                saved.clone()
+            });
+            if !initialized
+                && !snapshot.transport_running
+                && snapshot.expires_in.is_some_and(|v| v > 0)
+            {
+                let _ = app.state::<chat::Chat>().connect(&app);
+            }
+            let replies: Vec<String> = snapshot
+                .messages
+                .iter()
+                .filter(|m| m.reply.is_some())
+                .map(|m| m.id.clone())
+                .collect();
+            let state = app.state::<chat::Chat>();
+            let new_reply = {
+                let mut seen = state.seen.lock().unwrap();
+                let new_reply = snapshot
+                    .messages
+                    .iter()
+                    .rev()
+                    .find(|m| m.reply.is_some() && !seen.contains(&m.id))
+                    .cloned();
+                *seen = replies;
+                new_reply
+            };
+            let pending = snapshot
+                .messages
+                .iter()
+                .any(|m| m.delivered == 1 && m.reply.is_none());
+            let _ = app.emit_to("chat", "chat-state", &snapshot);
+            let _ = app.emit_to("companion", "chat-indicator", serde_json::json!({"pending":pending && snapshot.connected,"connected":snapshot.connected}));
+            if initialized {
+                if let Some(reply) = new_reply {
+                    let visible = app
+                        .get_webview_window("chat")
+                        .is_some_and(|w| w.is_visible().unwrap_or(false));
+                    if !visible && !app.state::<AppState>().hidden.load(Ordering::Relaxed) {
+                        let preview = app
+                            .state::<AppState>()
+                            .preferences
+                            .lock()
+                            .unwrap()
+                            .reply_preview;
+                        let text: String = if preview {
+                            reply.reply.unwrap_or_default().chars().take(160).collect()
+                        } else {
+                            "Your dot replied. Click to read and respond.".into()
+                        };
+                        let _ = app.emit_to(
+                            "bubble",
+                            "reply-preview",
+                            serde_json::json!({"text":text}),
+                        );
+                        place_near_companion(&app, "bubble");
+                        if let Some(w) = app.get_webview_window("bubble") {
+                            let _ = w.set_always_on_top(
+                                app.state::<AppState>()
+                                    .preferences
+                                    .lock()
+                                    .unwrap()
+                                    .always_on_top,
+                            );
+                            let _ = w.set_focusable(false);
+                            // Incoming replies never request focus. The accessible
+                            // badge confirms the actual window was shown.
+                            if w.show().is_ok() && w.is_visible().unwrap_or(false) {
+                                let _ = app.emit_to("companion", "reply-available", true);
+                            }
+                        }
+                    }
+                }
+            }
+            initialized = true;
+            let active = pending
+                || app
+                    .get_webview_window("chat")
+                    .is_some_and(|w| w.is_visible().unwrap_or(false));
+            std::thread::sleep(Duration::from_secs(if active { 2 } else { 10 }));
+        }
+    });
 }
 fn launch(app: &tauri::AppHandle) -> Result<(), String> {
     let p = app.state::<AppState>().preferences.lock().unwrap().clone();
@@ -204,6 +439,12 @@ fn toggle(app: &tauri::AppHandle) {
     s.hidden.store(hide, Ordering::Relaxed);
     if let Some(w) = app.get_webview_window("companion") {
         if hide {
+            if let Some(b) = app.get_webview_window("bubble") {
+                let _ = b.hide();
+            }
+            if let Some(c) = app.get_webview_window("chat") {
+                let _ = c.hide();
+            }
             let _ = w.hide();
         } else {
             recover(app, false);
@@ -329,6 +570,19 @@ fn companion_action(w: WebviewWindow, app: tauri::AppHandle, action: String) -> 
     known(&w)?;
     match action.as_str() {
         "settings" => show_settings(&app),
+        "chat" => show_chat(&app),
+        "latest-reply" => show_latest_reply(&app),
+        "dismiss-reply" => {
+            let _ = app.emit_to("companion", "reply-available", false);
+            if let Some(b) = app.get_webview_window("bubble") {
+                let _ = b.hide();
+            }
+        }
+        "close-chat" => {
+            if let Some(c) = app.get_webview_window("chat") {
+                let _ = c.hide();
+            }
+        }
         "toggle" => toggle(&app),
         "drag" => {
             if w.label() != "companion" {
@@ -344,6 +598,7 @@ fn companion_action(w: WebviewWindow, app: tauri::AppHandle, action: String) -> 
         }
         "quit" => {
             let _ = persist(&app);
+            app.state::<chat::Chat>().shutdown();
             app.exit(0);
         }
         _ => return Err("Unknown action.".into()),
@@ -380,7 +635,9 @@ fn restart_after_update(w: WebviewWindow, app: tauri::AppHandle) -> Result<(), S
 fn tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     let items = [
-        ("open", "Open my dot"),
+        ("chat", "Chat with my dot"),
+        ("latest-reply", "Show latest reply"),
+        ("open", "Open in ChatGPT"),
         ("toggle", "Hide / show companion"),
         ("pause", "Pause / resume animation"),
         ("recover", "Reset position"),
@@ -407,6 +664,8 @@ fn tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                     let _ = app.emit_to("settings", "app-error", message);
                 }
             }
+            "chat" => show_chat(app),
+            "latest-reply" => show_latest_reply(app),
             "toggle" => toggle(app),
             "recover" => {
                 recover(app, true);
@@ -424,6 +683,7 @@ fn tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             }
             "quit" => {
                 let _ = persist(app);
+                app.state::<chat::Chat>().shutdown();
                 app.exit(0);
             }
             _ => {}
@@ -449,10 +709,7 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _, event| {
                     if event.state() == ShortcutState::Pressed {
-                        if let Err(message) = launch(app) {
-                            show_settings(app);
-                            let _ = app.emit_to("settings", "app-error", message);
-                        }
+                        show_chat(app);
                     }
                 })
                 .build(),
@@ -497,6 +754,8 @@ pub fn run() {
                 position_dirty: AtomicBool::new(false),
                 last_move: Mutex::new(std::time::Instant::now()),
             });
+            app.manage(chat::Chat::default());
+            chat_monitor(app.handle().clone());
             let pet = app.get_webview_window("companion").unwrap();
             pet.set_size(LogicalSize::new(p.size as f64, p.size as f64 + 20.))?;
             pet.set_always_on_top(p.always_on_top)?;
@@ -614,12 +873,18 @@ pub fn run() {
                         s.preferences.lock().unwrap().position = Some((pos.x, pos.y));
                         *s.last_move.lock().unwrap() = std::time::Instant::now();
                         s.position_dirty.store(true, Ordering::Relaxed);
+                        if w.app_handle()
+                            .get_webview_window("bubble")
+                            .is_some_and(|b| b.is_visible().unwrap_or(false))
+                        {
+                            place_near_companion(w.app_handle(), "bubble");
+                        }
                     }
                 }
             }
             if let WindowEvent::CloseRequested { api, .. } = e {
                 api.prevent_close();
-                if w.label() == "settings" {
+                if ["settings", "chat", "bubble"].contains(&w.label()) {
                     let _ = w.hide();
                 } else {
                     toggle(w.app_handle());
@@ -630,6 +895,10 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            connect_chat,
+            get_chat,
+            send_chat,
+            retry_chat,
             get_avatar,
             import_avatar,
             reset_avatar,
@@ -644,6 +913,11 @@ pub fn run() {
             install_update,
             restart_after_update
         ])
-        .run(tauri::generate_context!())
-        .expect("Near Dot could not start");
+        .build(tauri::generate_context!())
+        .expect("Near Dot could not start")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<chat::Chat>().shutdown();
+            }
+        });
 }

@@ -1,4 +1,4 @@
-name: Validate desktop launcher
+name: Validate desktop companion
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
@@ -22,6 +22,9 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Validate private macOS relay
+        if: runner.os == 'macOS'
+        run: python3 -m unittest discover -s experiments/dot-relay -p 'test_*.py' -v
       - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check

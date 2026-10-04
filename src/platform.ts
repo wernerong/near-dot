@@ -1,3 +1,4 @@
+import { version } from "../package.json";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { defaults, type Snapshot } from "./types";
@@ -13,12 +14,19 @@ export async function call<T = void>(
     return {
       preferences: previewPreferences,
       warning: null,
-      version: "0.1.0",
+      version,
       updatesConfigured: false,
       updateStatus: null,
     } satisfies Snapshot as T;
   if (command === "get_companion")
     return { ...previewPreferences, hidden: false, configured: false } as T;
+  if (command === "get_chat")
+    return {
+      connected: false,
+      state: "preview",
+      expiresIn: null,
+      messages: [],
+    } as T;
   if (command === "get_avatar") return { dataUrl: null, warning: null } as T;
   if (command === "save_preferences") {
     previewPreferences = { ...(args?.preferences as typeof defaults) };

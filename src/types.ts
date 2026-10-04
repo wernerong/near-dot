@@ -7,6 +7,7 @@ export interface Preferences {
   opacity: number;
   alwaysOnTop: boolean;
   paused: boolean;
+  replyPreview: boolean;
   startup: boolean;
   autoCheck: boolean;
   unattendedNextLaunch: boolean;
@@ -24,6 +25,7 @@ export const defaults: Preferences = {
   opacity: 1,
   alwaysOnTop: false,
   paused: false,
+  replyPreview: false,
   startup: false,
   autoCheck: true,
   unattendedNextLaunch: false,
@@ -55,4 +57,18 @@ export interface UpdateStatus {
   version: string;
   notes: string;
   progress: number | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  text: string;
+  created: number;
+  delivered: number;
+  reply: string | null;
+}
+export interface ChatSnapshot {
+  connected: boolean;
+  state: string;
+  expiresIn: number | null;
+  messages: ChatMessage[];
 }

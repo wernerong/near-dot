@@ -13,3 +13,6 @@ playwright-report/
 release-config.json
 release-artifacts/
 docs/local-evidence/
+local-evidence/
+__pycache__/
+*.pyc

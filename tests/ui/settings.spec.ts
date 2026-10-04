@@ -61,7 +61,7 @@ test("keyboard setup, reduced motion and public screenshot", async ({
   await expect(page.getByRole("button", { name: "Test link" })).toBeFocused();
   await page.screenshot({ path: "docs/settings-preview.png", fullPage: true });
   await page.goto("/?view=companion");
-  await expect(page.locator("#pet")).toHaveAccessibleName("Set up my link");
+  await expect(page.locator("#pet")).toHaveAccessibleName("Chat with my dot");
   expect(
     await page
       .locator(".pet")
@@ -92,4 +92,46 @@ test("local image setup states privacy and does not invent dot activity", async 
     "src",
     "/companion.svg",
   );
+});
+
+test("chat preview is accessible, keyboard ready and cannot fabricate messages", async ({
+  page,
+}) => {
+  await page.goto("/?view=chat");
+  await expect(
+    page.getByRole("heading", { name: "Your dot", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Connection unavailable", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Message your dot", { exact: true })
+    .fill("Explicit synthetic offline UI test");
+  await expect(
+    page.getByRole("button", { name: "Send ↑", exact: true }),
+  ).toBeDisabled();
+  expect(await page.locator(".chat-message").count()).toBe(0);
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(
+    results.violations.map((v) => ({
+      id: v.id,
+      nodes: v.nodes.map((n) => n.target),
+    })),
+  ).toEqual([]);
+});
+
+test("reply bubble has accessible read and dismiss actions", async ({
+  page,
+}) => {
+  await page.goto("/?view=bubble");
+  await expect(
+    page.getByRole("button", {
+      name: "Your dot replied Click to read and respond.",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Dismiss reply", exact: true }),
+  ).toBeVisible();
 });

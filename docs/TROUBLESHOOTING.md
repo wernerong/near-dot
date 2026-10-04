@@ -29,3 +29,17 @@ Windows: disable Start at login in Near Dot Settings, save, then Quit. Use Setti
 Mac: disable Start at login and save, then Quit. Remove Near Dot.app using Finder's normal Trash flow. Remove only this app's preferences/backups if desired. Check System Settings → General → Login Items for any remaining Near Dot entry. Do not remove another app's files. A direct-distribution app uninstall does not automatically erase user preferences.
 
 iPhone: delete the Home Screen Shortcut icon, remove its Shortcuts widget and delete the Open ChatGPT shortcut in Shortcuts. The official ChatGPT app/account is independent of this recipe.
+
+## Private Mac chat preview
+
+**Clicking the icon now opens a panel.** Type a message and press Enter; Shift+Enter inserts a newline. Open ChatGPT remains an explicit button in the panel/tray. The reply button on the icon or Show latest reply in the tray opens the most recent saved relay reply.
+
+**No message text in the bubble.** Enable Show message text in desktop reply bubbles in Settings and save. Preview text is off by default for privacy. The companion must be shown; hidden companions suppress incoming bubbles.
+
+**Connection unavailable.** Choose Reconnect. On the configured test Mac the app starts the checksum-verified client with its existing private setup. It cannot create or renew credentials. A running client alone does not prove the dot subscription is active. Check the fixed relay deadline, runtime-key expiration and the existing dot's saved workflow. The owner-approved deadline must be verifiable through the connection check; an old one-hour stop condition in the dot workflow must be updated when the owner explicitly extends it.
+
+**Delivered but no answer.** A successful event delivery is not a reply. Wait for the real reply; after three minutes the panel says it is taking longer. Avoid submitting the same message again. Undelivered messages have Retry delivery, which keeps the same message/event ID. Closing the panel does not cancel a delivered request.
+
+**Different image after changing it in ChatGPT.** The companion uses a private local PNG. Click its avatar in Chat to choose an updated copy. Automatic image sync is not supported.
+
+**Complete removal of the private preview.** Quit the app, remove its app bundle and optional preferences/avatar data, then retire the plugin/tunnel/key in their official controls. Separately remove `~/Library/Application Support/Near Dot/transport-proof` only after deciding whether to retain its message history. That private directory contains the diagnostic mailbox, credentials and verified client and is not removed by resetting launcher preferences. Never upload it to a public issue.

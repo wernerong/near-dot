@@ -2,7 +2,7 @@
 
 Status: source preview authorized; signed installers remain in preparation. Do not publish later releases, enable another public service, enroll in paid signing or submit to a store without the user's final review. A local unsigned Mac development bundle is not a production recovery build.
 
-The user has explicitly authorized a public repository and initial release. Version 0.1.0 is a **source-only development prerelease** with clear limits and no executable assets, updater feed or signing key. That publication does not waive any installer acceptance gate below, authorize paid services or enable production updates. Never attach the local development app, private preferences or personal avatar. Later binary workflows continue to prepare drafts for review.
+The user has explicitly authorized a public repository and initial release. Version 0.1.0 is a **source-only development prerelease** with clear limits and no executable assets, updater feed or signing key. That publication does not waive any installer acceptance gate below, authorize paid services or enable production updates. Never attach the local development app, private preferences or personal avatar. Version 0.2.0-preview.1 prepares the private Mac chat source changes and release notes; it does not publish a binary or activate updates. Later binary workflows continue to prepare drafts for review.
 
 ## Set up protected infrastructure after approval
 

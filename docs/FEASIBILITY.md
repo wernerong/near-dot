@@ -1,12 +1,14 @@
 # Feasibility, rechecked 4 October 2026
 
-## Verdict
+This page records the initial launcher assessment. The later authorized MCP investigation established private two-way chat on one Mac; see the [current capability findings](ROADMAP.md) and [live transport evidence](TRANSPORT-PROOF.md). The initial matrix below is historical, not the current private-preview capability claim.
+
+## Initial verdict
 
 A local Windows/Mac launcher is feasible now. One-action access to a specific existing dot is conditional on a user's private HTTPS destination passing a local device test. The checked official documentation did not establish a public dot conversation API, third-party OAuth access to an existing dot, or a stable exact-dot app-link/URL-scheme contract. This is an evidence boundary, not a claim that no such integration could ever exist.
 
 Use the official desktop or desktop-web surface for setup. The messaging guide says the mobile app requires its supporting update and explicitly excludes mobile web. There is no Safari dot fallback in this project. [OpenAI messaging](https://learn.chatgpt.com/docs/dots/channels)
 
-## Capability matrix
+## Initial launcher capability matrix
 
 | Capability                                | Windows                                                                                       | Mac                       | iPhone                                                                                     | V1 decision                                                                                                      |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |

@@ -1,6 +1,6 @@
 # Security policy
 
-Near Dot is in development. No production signed release is supported yet. Please report security findings privately through the repository's private vulnerability-reporting feature once it is enabled. Do not include a personal conversation URL in a public issue. No support email or personal identity is included in this template.
+Near Dot is in development. No production signed release is supported yet. Please report security findings privately through the repository's private vulnerability-reporting feature on GitHub. Do not include a personal conversation URL in a public issue. No support email or personal identity is included in this template.
 
 Threat boundaries: untrusted pasted URLs, compromised renderer/remote content, altered feeds/packages, accidental private data release, shortcut conflicts and corrupt local settings. Inputs are validated in Rust. Renderer capabilities are limited to local events; no remote content or website embedding. URL launch goes through an OS opener with a data argument.
 
@@ -11,3 +11,5 @@ Authenticode on Windows, Developer ID/notarization on Mac, and Tauri updater sig
 Before public release: protect main and version tags, require workflow/CODEOWNERS review, protect the `release` environment with human approval, enable secret scanning/push protection/private reporting where available, run dependency and secret scans, audit third-party licenses and verify package provenance/checksums. The provided workflow prepares a **draft**; publishing remains a separate human-reviewed action.
 
 If updater signing is compromised, pause channels with the uncompromised control key if available, stop release signing, revoke affected OS certificates and publish an incident notice. Do not silently turn off signature verification. Prefer a newer signed recovery build. See the release runbook for key backup and recovery constraints.
+
+The experimental private macOS relay adds a separate trust boundary: the authorized tunnel workspace can call its two mailbox tools. Use only a private single-user setup. The renderer cannot read the key, choose a helper command, or extend the connection deadline. Callback verification uses exact-byte signatures, HTTPS host allowlisting, public-address validation and pinned-IP TLS connections without redirects. Saved text is rendered literally. Credentials and mailbox records are protected by local filesystem permissions, not application encryption. The proof is not a multi-user public service or complete production MCP implementation; see the [relay limits](experiments/dot-relay/README.md).

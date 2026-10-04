@@ -1,8 +1,8 @@
 # Near Dot
 
-An independent, local desktop companion that opens your existing dot with a click or shortcut. Phase 1 targets **Windows x64 and Mac**; the iPhone companion is an Apple Shortcuts recipe.
+An independent, local desktop companion for your existing dot, with a browser launcher and an experimental private Mac chat connection. Phase 1 targets **Windows x64 and Mac**; the iPhone companion is an Apple Shortcuts recipe.
 
-**Status: source-only development preview, not cleared for public binary release.** The initial public release contains source and a checksum, with no signed installers or configured update feed. No paid signing service, launcher account, backend or OpenAI API billing has been created. See [acceptance evidence](docs/ACCEPTANCE.md) before treating any platform as supported.
+**Version: 0.2.0-preview.1 — source preview, not cleared for public binary release.** The initial public release contains source and a checksum, with no signed installers or configured update feed. No paid signing service, launcher account, backend or OpenAI API billing has been created. See [acceptance evidence](docs/ACCEPTANCE.md) before treating any platform as supported.
 
 ![Settings browser preview, without personal links](docs/settings-preview.png)
 
@@ -10,19 +10,19 @@ An independent, local desktop companion that opens your existing dot with a clic
 
 - Original transparent seed companion, gentle animation and hover feedback.
 - Optional local PNG image for your companion, with metadata stripped and no upload or profile scraping.
-- Click or configurable global shortcut to launch your saved HTTPS destination in the default browser.
+- Click or configurable global shortcut to open the companion chat panel. Open ChatGPT explicitly from the panel or tray. Private chat currently works only with the configured macOS relay; other devices retain the browser launcher option.
 - Tray/menu bar access, hide/show, pause, size, opacity, always-on-top, position reset and settings.
 - Opt-in login startup. Keyboard access through the settings window and tray; reduced-motion support.
 - Local link validation and an explicit test-and-confirm setup flow.
 - Signed update adapter with progress, errors, defer/skip, stable/preview channels and staged/paused rollout.
 
-This is a launcher. It does not read conversations, show dot activity/unread badges, synchronize memory or sign in for you. A successful browser launch is **not proof that ChatGPT opened your dot**. Your device's Test link step establishes that. Keep the actual private conversation link out of source, screenshots, issues and releases; never use a public share link.
+The public v0.1.0 release is a launcher. This prerelease adds a private macOS chat preview for the existing dot through the verified MCP relay. It does not export ChatGPT conversations, track global dot activity, synchronize all memory or sign in for you. A successful browser launch is **not proof that ChatGPT opened your dot**. Your device's Test link step establishes that. Keep the actual private conversation link out of source, screenshots, issues and releases; never use a public share link.
 
 The official integration recheck on 4 October 2026 did not establish a public dot conversation API or stable third-party deep-link contract. General API conversation state does not grant access to an existing ChatGPT dot. Desktop ChatGPT/web and a supported mobile app are the official surfaces; mobile web is unsupported. Read the [capability matrix and sources](docs/FEASIBILITY.md).
 
 ## Run and build
 
-Install Node **22.22.2**, Rust **1.95.0** and the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/). Windows needs Visual Studio C++ build tools and WebView2. Mac needs Xcode command-line tools. No API key is needed.
+Install Node **22.22.2**, Rust **1.95.0** and the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/). Windows needs Visual Studio C++ build tools and WebView2. Mac needs Xcode command-line tools. The launcher needs no API key. The optional private macOS chat preview needs the separately reviewed tunnel setup, its restricted runtime key and system Python 3.
 
 ```sh
 npm ci
@@ -63,6 +63,8 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check
 npm audit --audit-level=moderate
 cargo install cargo-audit --version 0.22.2 --locked
 cargo audit --file src-tauri/Cargo.lock
+# Private relay tests (macOS/POSIX only)
+python3 -m unittest discover -s experiments/dot-relay -p 'test_*.py' -v
 python3 scripts/scan-public.py
 python3 scripts/run-gitleaks.py
 ```
@@ -74,7 +76,7 @@ If Node cannot find a locally trusted issuer, configure `NODE_EXTRA_CA_CERTS` wi
 1. In a desktop browser, open your existing dot in ChatGPT, signed into the correct account/workspace. If it exposes a distinct HTTPS address, copy the browser address bar, then open that address in a fresh tab and confirm it returns to the same dot. Do not use Share or create a public link. The official guidance does not document a dedicated private-link procedure; if no address reliably reopens your dot, leave the destination unconfigured.
 2. Paste it in Settings. Near Dot displays it locally, accepts only `https://chatgpt.com` and rejects credentials, query/fragment tokens, nonstandard ports, share and API paths.
 3. Select **Test link**. Confirm the default browser opens your existing dot. If it opens a different conversation, a login screen or an unavailable page, leave it unconfirmed and fix access in ChatGPT.
-4. Tick the test confirmation, then **Save settings**. Click the companion, **Open my dot**, the tray item or your shortcut.
+4. Tick the test confirmation, then **Save settings**. Use **Open ChatGPT** in the chat panel or tray. Clicking the companion or using the shortcut opens the local chat panel.
 
 Choose **Settings → Choose local image** to use a PNG of your dot that you already have permission to use. Images must be still PNGs up to 1024 × 1024 pixels and 4 MiB. The image is decoded and stored only in your per-user app directory, separate from the public project. It changes the on-screen companion, not the installed application or tray icon. No automatic avatar download or synchronization is implemented. Restore default preserves the previous image locally.
 
@@ -82,7 +84,11 @@ No desktop app scheme is enabled because the checked sources did not document an
 
 ## Live messages and direct conversation
 
-Activity animation, message snippets and talking to the existing dot from a companion panel need a documented, authorized integration. The official recheck has not established that integration. Idle animation is decorative; Near Dot has no access to dot messages or task state. [Next-phase requirements and evidence](docs/ROADMAP.md) describe the blockers and the supported contact-channel options. A separate API assistant would have different identity/history/permissions and costs; it is outside this release.
+This prerelease connects the [verified MCP relay](experiments/dot-relay/README.md) to a desktop chat panel and real incoming reply bubbles on the configured test Mac. Click the companion or use the shortcut, type a message, and press Enter. Shift+Enter inserts a newline. The window retains relay history across restarts, reports disconnected/expired states, and offers Reconnect using the already authorized private setup. A failed delivery retains its local message ID for retry. Closing Chat keeps the companion available for incoming bubbles. The companion’s small reply button or tray’s Show latest reply also opens the saved reply for keyboard access.
+
+Enable **Settings → Show message text in desktop reply bubbles** to display snippets; this is off by default. Replies do not request focus. Choose your own PNG using the avatar button in Chat or Settings; there is no automatic profile/image sync. Voice, full ChatGPT history sync and global work status remain unavailable. No separate API assistant is used.
+
+This private preview uses official Secure MCP Tunnel and MCP Events, a separately configured restricted runtime key, a dot subscription, the verified macOS arm64 tunnel client and system Python 3. It is not a public consumer connection flow. The initial one-hour proof window can be extended explicitly by its local owner up to 24 hours; runtime-key expiration remains independent. See [live evidence](docs/TRANSPORT-PROOF.md), [privacy](PRIVACY.md) and [remaining gates](docs/ROADMAP.md). The public v0.1.0 release remains the earlier launcher.
 
 ## Updates and release readiness
 
@@ -90,7 +96,7 @@ Automatic checks occur after 30 seconds and every six hours; disable them in Set
 
 Package installation normally requires user action. Windows installers may close this companion and require OS approval. Mac exposes a restart action after installation. Defer hides the offer until a subsequent check; skipping suppresses that version for automatic checks, while a manual check can offer it again. Optional unattended installation is a one-time opt-in for the next manual launch, before the companion appears; login startup and a running companion never install automatically. This mode still requires signed-installer acceptance testing before public release.
 
-See [release runbook](docs/RELEASE.md), [security policy](SECURITY.md), [privacy](PRIVACY.md), [architecture](docs/ARCHITECTURE.md) and [troubleshooting/uninstall](docs/TROUBLESHOOTING.md).
+See [prerelease notes](docs/releases/0.2.0-preview.1.md), [release runbook](docs/RELEASE.md), [security policy](SECURITY.md), [privacy](PRIVACY.md), [architecture](docs/ARCHITECTURE.md) and [troubleshooting/uninstall](docs/TROUBLESHOOTING.md).
 
 ## iPhone
 
@@ -98,4 +104,4 @@ Follow the [documented Shortcut recipe](docs/IPHONE.md). The default label is **
 
 ## License and support
 
-MIT is recommended and included for code and original art. Third-party packages retain their own licenses; review the locked dependency inventory before release. Near Dot is independent and is not affiliated with or endorsed by OpenAI or Apple. Support covers this launcher's settings and updates, not ChatGPT account eligibility, service availability or dot behavior. Do not submit private conversation links or screenshots to a public issue.
+MIT is recommended and included for code and original art. Third-party packages retain their own licenses; review the locked dependency inventory before release. Near Dot is independent and is not affiliated with or endorsed by OpenAI or Apple. Support covers the companion's local controls and experimental relay, not ChatGPT account eligibility, service availability or dot behavior. Do not submit private conversation links or screenshots to a public issue.

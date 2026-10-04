@@ -1,4 +1,5 @@
 import "./style.css";
+import { chatUI, bubbleUI } from "./chat";
 import { call, on, preview } from "./platform";
 import { destinationError, shouldDrag } from "./validation";
 import type {
@@ -43,11 +44,11 @@ async function bindAvatar(id: string) {
 
 async function companionUI() {
   document.body.className = "companion-window";
-  root.innerHTML = `<section class="companion" aria-label="Near Dot launcher">
+  root.innerHTML = `<section class="companion" aria-label="Near Dot companion">
     <button id="drag" class="drag-grip" aria-label="Drag companion" title="Drag to move">⠿</button>
-    <button id="pet" class="pet" aria-label="Open my dot" title="Open my dot"><img id="companion-image" src="/companion.svg" alt="" draggable="false"></button>
-    <button id="open-label" class="open-label">Open my dot <span aria-hidden="true">↗</span></button>
-    <button id="pet-settings" class="pet-settings" aria-label="Open settings" title="Settings">⚙</button>
+    <button id="pet" class="pet" aria-label="Chat with my dot" title="Chat with my dot"><img id="companion-image" src="/companion.svg" alt="" draggable="false"></button>
+    <button id="open-label" class="open-label">Chat with my dot <span aria-hidden="true">↗</span></button>
+    <button id="pet-reply" class="pet-reply" aria-label="Show latest reply" title="Show latest reply">···</button><button id="pet-settings" class="pet-settings" aria-label="Open settings" title="Settings">⚙</button>
     <p id="pet-error" class="pet-error" role="status"></p>
   </section>`;
   let config: Companion;
@@ -55,21 +56,35 @@ async function companionUI() {
     config = p;
     root.style.opacity = String(p.opacity);
     root.classList.toggle("paused", p.paused || p.hidden || document.hidden);
-    element("open-label").firstChild!.textContent = p.configured
-      ? "Open my dot "
-      : "Set up my link ";
-    element("pet").setAttribute(
-      "aria-label",
-      p.configured ? "Open my dot" : "Set up my link",
-    );
+    element("open-label").firstChild!.textContent = "Chat with my dot ";
+    element("pet").setAttribute("aria-label", "Chat with my dot");
   };
   apply(await call<Companion>("get_companion"));
   await bindAvatar("companion-image");
   await on<Companion>("companion-config", apply);
+  await on<boolean>("reply-available", (available) => {
+    const button = element("pet-reply");
+    button.textContent = available ? "●" : "···";
+    button.setAttribute(
+      "aria-label",
+      available ? "Read new reply" : "Show latest reply",
+    );
+    button.title = available ? "Read new reply" : "Show latest reply";
+    button.classList.toggle("has-reply", available);
+  });
+  await on<{ pending: boolean; connected: boolean }>(
+    "chat-indicator",
+    (status) => {
+      root.classList.toggle("awaiting-reply", status.pending);
+      element("pet").title = status.pending
+        ? "Waiting for your dot’s reply"
+        : "Chat with my dot";
+    },
+  );
   document.addEventListener("visibilitychange", () => apply(config));
   const open = async () => {
     try {
-      await call("open_destination");
+      await call("companion_action", { action: "chat" });
     } catch (e) {
       element("pet-error").textContent = errorText(e);
     }
@@ -114,6 +129,10 @@ async function companionUI() {
     "click",
     () => void call("companion_action", { action: "settings" }),
   );
+  element("pet-reply").addEventListener(
+    "click",
+    () => void call("companion_action", { action: "latest-reply" }),
+  );
   root.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     void call("companion_action", { action: "settings" });
@@ -134,7 +153,7 @@ async function settingsUI() {
         <div class="card-footer"><span>No new account. No API billing.</span><button type="button" id="open" class="text-button">Open my dot ↗</button></div>
       </section>
       <section class="card"><div class="section-heading"><span class="step">02</span><div><h2>Make yourself comfortable</h2><p>A small presence. Your preferred way in.</p></div></div>
-        <div class="avatar-controls"><h3>Your companion image</h3><p class="help">Choose a still PNG of your dot, up to 1024 × 1024 pixels and 4 MiB. Only use an image you have permission to use.</p><div class="update-buttons"><button type="button" id="choose-avatar" class="secondary">Choose local image</button><button type="button" id="reset-avatar" class="text-button">Restore default image</button></div><p id="avatar-status" class="help" role="status"></p><p class="help">Idle movement is decorative. Near Dot cannot see whether your dot is working or has a new message.</p></div>
+        <div class="update-buttons"><button type="button" id="open-chat" class="secondary">Chat with my dot</button></div><label class="check"><input type="checkbox" id="replyPreview"><span>Show message text in desktop reply bubbles</span></label><p class="help">Off by default. Anyone looking at your screen can see enabled previews. Chat uses your separately connected private relay.</p><div class="avatar-controls"><h3>Your companion image</h3><p class="help">Choose a still PNG of your dot, up to 1024 × 1024 pixels and 4 MiB. Only use an image you have permission to use.</p><div class="update-buttons"><button type="button" id="choose-avatar" class="secondary">Choose local image</button><button type="button" id="reset-avatar" class="text-button">Restore default image</button></div><p id="avatar-status" class="help" role="status"></p><p class="help">Idle movement is decorative. A waiting indicator refers only to a message sent through this companion, not all dot activity.</p></div>
         <div class="two-col"><div><label for="shortcut">Global shortcut</label><input id="shortcut" type="text" spellcheck="false" aria-describedby="shortcut-help"><p id="shortcut-help" class="help">CommandOrControl+Shift+D · leave blank to disable.</p></div><div class="ranges"><label for="size">Size <output id="size-value"></output></label><input id="size" type="range" min="120" max="240" step="4"><label for="opacity">Opacity <output id="opacity-value"></output></label><input id="opacity" type="range" min="0.35" max="1" step="0.05"></div></div>
         <div class="checks-grid"><label class="check"><input type="checkbox" id="alwaysOnTop"><span>Always on top</span></label><label class="check"><input type="checkbox" id="paused"><span>Pause animation</span></label><label class="check"><input type="checkbox" id="startup"><span>Start at login</span></label><span class="help">Login startup is optional.</span></div>
         <div class="card-footer"><button type="button" id="toggle" class="text-button">Hide / show companion</button><button type="button" id="recover" class="text-button">Reset position</button></div>
@@ -149,7 +168,7 @@ async function settingsUI() {
       <div class="save-bar"><p id="status" role="status" aria-live="polite">Your link and preferences stay on this device.</p><button type="submit" id="save">Save settings <span aria-hidden="true">→</span></button></div>
     </form>
     <details class="iphone"><summary>Take the shortcut to your iPhone <span aria-hidden="true">↗</span></summary><p>In Apple Shortcuts, create a shortcut with <strong>Open App → ChatGPT</strong>. Name it <strong>Open ChatGPT</strong>, then add it to your Home Screen or a Shortcuts widget. Open your dot inside the app.</p><p>Use an exact URL only after it opens your dot in the installed, supported ChatGPT app on your actual iPhone. Mobile Safari does not support dots. This path is untested on iPhone here.</p></details>
-    <footer><p>Independent project. Not affiliated with or endorsed by OpenAI.<br>No telemetry, conversation storage or dot status tracking.</p><div><span id="version"></span><button id="reset-settings" class="text-button">Reset local settings</button><button id="quit" class="text-button">Quit</button></div></footer>
+    <footer><p>Independent project. Not affiliated with or endorsed by OpenAI.<br>No telemetry or global dot status tracking. Private chat preview keeps its own exchanges locally.</p><div><span id="version"></span><button id="reset-settings" class="text-button">Reset local settings</button><button id="quit" class="text-button">Quit</button></div></footer>
   </div>`;
   element("preview-note").hidden = !preview;
   const snapshot = await call<Snapshot>("get_preferences");
@@ -162,6 +181,13 @@ async function settingsUI() {
     element("status").classList.toggle("error", error);
   };
   const applyAvatar = await bindAvatar("hero-image");
+  element("open-chat").addEventListener(
+    "click",
+    () =>
+      void call("companion_action", { action: "chat" }).catch((e) =>
+        status(errorText(e), true),
+      ),
+  );
   for (const [id, command] of [
     ["choose-avatar", "import_avatar"],
     ["reset-avatar", "reset_avatar"],
@@ -187,6 +213,7 @@ async function settingsUI() {
   const fields = [
     "alwaysOnTop",
     "paused",
+    "replyPreview",
     "startup",
     "autoCheck",
     "verified",
@@ -410,6 +437,15 @@ async function settingsUI() {
     fill(saved);
   });
 }
-void (companion ? companionUI() : settingsUI()).catch((e) => {
+const view = new URLSearchParams(location.search).get("view");
+void (
+  companion
+    ? companionUI()
+    : view === "chat"
+      ? chatUI()
+      : view === "bubble"
+        ? bubbleUI()
+        : settingsUI()
+).catch((e) => {
   root.textContent = errorText(e);
 });
