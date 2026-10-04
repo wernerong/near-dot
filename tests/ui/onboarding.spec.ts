@@ -85,7 +85,7 @@ test("fresh setup tests a link, saves choices and stays complete after reopening
     page.getByLabel("Check automatically every 6 hours"),
   ).toBeChecked();
   await expect(page.getByLabel("Channel", { exact: true })).toHaveValue(
-    "preview",
+    version.includes("-") ? "preview" : "stable",
   );
   await page.locator("#preview-note").evaluate((e) => {
     (e as HTMLElement).hidden = false;

@@ -1,6 +1,6 @@
 # Security policy
 
-Near Dot is in development. No production signed release is supported yet. Please report security findings privately through the repository's private vulnerability-reporting feature on GitHub. Do not include a personal conversation URL in a public issue. No support email or personal identity is included in this template.
+The current release line is 1.0.x. Version 1.0.0 uses unsigned Windows installers and ad-hoc Mac bundles without notarization, an explicit owner-approved distribution choice. Updates still require cryptographic signatures. Please report security findings privately through the repository's private vulnerability-reporting feature on GitHub. Do not include a personal conversation URL in a public issue. No support email or personal identity is included in this template.
 
 Threat boundaries: untrusted pasted URLs, compromised renderer/remote content, altered feeds/packages, accidental private data release, shortcut conflicts and corrupt local settings. Inputs are validated in Rust. Renderer capabilities are limited to local events; no remote content or website embedding. URL launch goes through an OS opener with a data argument.
 

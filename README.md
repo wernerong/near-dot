@@ -2,7 +2,7 @@
 
 An independent, local desktop companion for your existing dot, with a browser launcher. An explicit development build retains the experimental private Mac chat connection. Phase 1 targets **Windows x64 and Mac**; the iPhone companion is an Apple Shortcuts recipe.
 
-**Candidate: 0.3.0-preview.1 — prepared locally, not published or cleared for public binary release.** The initial public release contains source and a checksum, with no signed installers or configured update feed. No paid signing service, launcher account, backend or OpenAI API billing has been created. See [acceptance evidence](docs/ACCEPTANCE.md) before treating any platform as supported.
+**Version 1.0.0 — public launcher release, based on 0.3.0-preview.1.** [Download Windows or Mac installers](https://github.com/wernerong/near-dot/releases/tag/v1.0.0). Windows installers are not Authenticode signed; Mac bundles are ad-hoc sealed, without Developer ID/notarization, matching the owner's approved AI Usage Widget distribution model. OS warnings or blocking are possible. Automatic updates use mandatory cryptographic signatures. See [installation](docs/INSTALL.md) and [tested/untested evidence](docs/ACCEPTANCE.md).
 
 ![Settings browser preview, without personal links](docs/settings-preview.png)
 
@@ -16,7 +16,7 @@ An independent, local desktop companion for your existing dot, with a browser la
 - Guided first-run setup: test your destination, choose appearance and controls, review updates, then finish. Choices persist across relaunch and upgrade; existing verified installations skip the wizard.
 - Signed update adapter with progress, errors, defer/skip, stable/preview channels and staged/paused rollout.
 
-The public v0.1.0 release is a launcher. The public 0.3.0 preview candidate remains a launcher. The private MCP proof is behind an explicit development feature and is excluded from public installer resources. It does not export ChatGPT conversations, track global dot activity, synchronize all memory or sign in for you. A successful browser launch is **not proof that ChatGPT opened your dot**. Your device's Test link step establishes that. Keep the actual private conversation link out of source, screenshots, issues and releases; never use a public share link.
+Version 1.0.0 is a launcher. The private MCP proof is behind an explicit development feature and is excluded from public installer resources. It does not export ChatGPT conversations, track global dot activity, synchronize all memory or sign in for you. A successful browser launch is **not proof that ChatGPT opened your dot**. Your device's Test link step establishes that. Keep the actual private conversation link out of source, screenshots, issues and releases; never use a public share link.
 
 The official integration recheck on 4 October 2026 did not establish a public dot conversation API or stable third-party deep-link contract. General API conversation state does not grant access to an existing ChatGPT dot. Desktop ChatGPT/web and a supported mobile app are the official surfaces; mobile web is unsupported. Read the [capability matrix and sources](docs/FEASIBILITY.md).
 
@@ -45,7 +45,7 @@ CI=true npm run tauri -- build --target x86_64-apple-darwin --bundles app,dmg
 npm run tauri -- build --no-bundle
 ```
 
-The unsigned Mac `.app` lives in `src-tauri/target/TARGET/release/bundle/macos/Near Dot.app`; the Windows installer is under `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`. Do not distribute these unsigned development outputs as public releases or disable OS security to run them.
+The unsigned Mac `.app` lives in `src-tauri/target/TARGET/release/bundle/macos/Near Dot.app`; the Windows installer is under `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`. These development outputs lack production updater configuration. Use the protected release workflow for public packages; keep OS security enabled.
 
 Browser-only visual preview (OS actions are deliberately unavailable):
 
@@ -113,13 +113,13 @@ The requested seamless live ChatGPT chat, incoming ChatGPT-origin replies and sh
 
 The Settings footer and tray/menu bar stamp the running version; native app metadata and versioned installer filenames stamp the packaged version. `npm run version:check` checks all manifests and lockfiles; maintainers use `npm run version:set -- VERSION` to update them together. Prereleases default fresh installations to the Preview channel.
 
-The manual **Prepare signed desktop draft** workflow prepares Windows x64, Mac arm64 and Mac Intel installers plus updater artifacts. It requires protected Authenticode, Developer ID/notarization and Tauri updater keys, verifies every signature against the shipped public key, and creates only a draft with a paused 0% feed. No release or channel is activated by this work.
+The manual **Prepare desktop release draft** workflow builds Windows x64, Apple Silicon and Intel Mac installers, tests an upgrade from the 0.3.0 baseline using Tauri’s real updater, and prepares a draft with checksums, signatures and provenance. Version 1.0.0 uses the explicitly approved unsigned OS distribution option. Protected Tauri signing remains mandatory; optional publisher signing is available when certificates are provisioned. Draft channel files start paused until publication review.
 
 Automatic checks occur after 30 seconds and every six hours; disable them in Settings. A release build needs a pinned verification public key and reviewed public GitHub repository. Development builds report that updates are unconfigured. No placeholder server or key is trusted.
 
-Package installation normally requires user action. Windows installers may close this companion and require OS approval. Mac exposes a restart action after installation. Defer hides the offer until a subsequent check; skipping suppresses that version for automatic checks, while a manual check can offer it again. Optional unattended installation is a one-time opt-in for the next manual launch, before the companion appears; login startup and a running companion never install automatically. This mode still requires signed-installer acceptance testing before public release.
+Package installation normally requires user action. Windows installers may close this companion and require OS approval. Mac exposes a restart action after installation. Defer hides the offer until a subsequent check; skipping suppresses that version for automatic checks, while a manual check can offer it again. Optional unattended installation is a one-time opt-in for the next manual launch, before the companion appears; login startup and a running companion never install automatically. The unattended next-launch option is experimental; the hosted updater drill does not exercise login startup, a physical OS prompt or an active user session.
 
-See [candidate notes](docs/releases/0.3.0-preview.1.md), [release runbook](docs/RELEASE.md), [security policy](SECURITY.md), [privacy](PRIVACY.md), [architecture](docs/ARCHITECTURE.md) and [troubleshooting/uninstall](docs/TROUBLESHOOTING.md).
+See [candidate notes](docs/releases/1.0.0.md), [release runbook](docs/RELEASE.md), [security policy](SECURITY.md), [privacy](PRIVACY.md), [architecture](docs/ARCHITECTURE.md) and [troubleshooting/uninstall](docs/TROUBLESHOOTING.md).
 
 ## iPhone
 
@@ -127,4 +127,4 @@ Follow the [documented Shortcut recipe](docs/IPHONE.md). The default label is **
 
 ## License and support
 
-MIT is recommended and included for code and original art. Third-party packages retain their own licenses; review the locked dependency inventory before release. Near Dot is independent and is not affiliated with or endorsed by OpenAI or Apple. Support covers the companion's local controls and experimental relay, not ChatGPT account eligibility, service availability or dot behavior. Do not submit private conversation links or screenshots to a public issue.
+MIT is included for code and original art. [Third-party notices](THIRD-PARTY-NOTICES.txt) accompany the app and release; [the updater verification public key](updater-public-key.txt) is public. Third-party packages retain their own licenses; review the locked dependency inventory before release. Near Dot is independent and is not affiliated with or endorsed by OpenAI or Apple. Support covers the companion's local controls and experimental relay, not ChatGPT account eligibility, service availability or dot behavior. Do not submit private conversation links or screenshots to a public issue.

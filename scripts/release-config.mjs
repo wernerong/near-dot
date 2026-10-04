@@ -23,6 +23,10 @@ if (
   throw new Error(
     "Set the Tauri verification PUBLIC key. Never provide a private key here.",
   );
+if (key !== fs.readFileSync("updater-public-key.txt", "utf8").trim())
+  throw new Error(
+    "Release verification key does not match the reviewed source key.",
+  );
 const config = {
   bundle: { createUpdaterArtifacts: true },
   plugins: {
@@ -35,7 +39,10 @@ const config = {
     },
   },
 };
-if (process.platform === "win32")
+const osSigning = process.env.NEAR_DOT_OS_SIGNING || "signed";
+if (!["signed", "unsigned"].includes(osSigning))
+  throw new Error("Choose signed or unsigned OS distribution explicitly.");
+if (process.platform === "win32" && osSigning === "signed")
   config.bundle.windows = {
     signCommand: {
       cmd: "powershell",
@@ -47,5 +54,7 @@ if (process.platform === "win32")
       ],
     },
   };
+if (process.platform === "darwin" && osSigning === "unsigned")
+  config.bundle.macOS = { signingIdentity: "-" };
 fs.writeFileSync("release-config.json", JSON.stringify(config, null, 2) + "\n");
 console.log("Release configuration generated with a public verification key.");

@@ -1,0 +1,68 @@
+name: Prepare update channel controls
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing published release tag
+        required: true
+        default: v1.0.0
+      channel:
+        type: choice
+        options: [stable, preview]
+        default: stable
+      rollout:
+        description: Eligible percentage 0–100
+        required: true
+        default: "0"
+      paused:
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  sign:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: release
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_CHANNEL: ${{ inputs.channel }}
+      ROLLOUT: ${{ inputs.rollout }}
+      PAUSED: ${{ inputs.paused }}
+      NEAR_DOT_UPDATE_REPO: ${{ github.repository }}
+      NEAR_DOT_UPDATER_PUBLIC_KEY: ${{ vars.NEAR_DOT_UPDATER_PUBLIC_KEY }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22.22.2"
+      - run: npm ci
+      - name: Download signed immutable source feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
+          [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" == false ]]
+          source_channel=stable
+          if [[ "$RELEASE_TAG" == *-* ]]; then source_channel=preview; fi
+          gh release download "$RELEASE_TAG" --pattern "$source_channel.json*" --dir source-feed
+          node scripts/prepare-channel.mjs "source-feed/$source_channel.json" channel-controls "${RELEASE_TAG#v}" "$RELEASE_CHANNEL" "$ROLLOUT" "$PAUSED"
+      - name: Sign exact channel bytes
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run tauri -- signer sign "channel-controls/$RELEASE_CHANNEL.json"
+          node scripts/verify-signatures.mjs channel-controls
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: channel-${{ inputs.channel }}
+          path: channel-controls/*
+          if-no-files-found: error
+          retention-days: 7

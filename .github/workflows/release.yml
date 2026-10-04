@@ -1,14 +1,23 @@
-name: Prepare signed desktop draft
+name: Prepare desktop release draft
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Reviewed existing version tag, e.g. v0.3.0-preview.1"
+        description: "Reviewed existing version tag, e.g. v1.0.0"
         required: true
+      baseline_tag:
+        description: "Tested prior installer tag for the upgrade drill"
+        required: true
+        default: v0.3.0-preview.1
       channel:
         type: choice
         options: [preview, stable]
-        default: preview
+        default: stable
+      os_signing:
+        description: "Unsigned installers are approved for v1.0.0; updater signing is always required."
+        type: choice
+        options: [unsigned, signed]
+        default: unsigned
 permissions:
   contents: read
 concurrency:
@@ -20,9 +29,11 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       commit: ${{ steps.tag.outputs.commit }}
+      baseline_run: ${{ steps.baseline.outputs.run }}
     env:
       RELEASE_TAG: ${{ inputs.tag }}
       RELEASE_CHANNEL: ${{ inputs.channel }}
+      BASELINE_TAG: ${{ inputs.baseline_tag }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -43,6 +54,19 @@ jobs:
           node scripts/versions.mjs
           node --input-type=module -e 'import fs from "node:fs"; const v=JSON.parse(fs.readFileSync("package.json")).version; if(process.env.RELEASE_TAG!==`v${v}` || (process.env.RELEASE_CHANNEL==="stable" && v.includes("-")) || !fs.existsSync(`docs/releases/${v}.md`)) throw Error("Release version/channel/notes mismatch");'
           printf 'commit=%s\n' "$candidate_commit" >> "$GITHUB_OUTPUT"
+      - name: Select successful baseline installer run
+        id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BASELINE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
+          git merge-base --is-ancestor "$BASELINE_TAG" HEAD
+          baseline_commit=$(git rev-parse "$BASELINE_TAG^{commit}")
+          baseline_run=$(gh run list --workflow ci.yml --commit "$baseline_commit" --status success --json databaseId --jq '.[0].databaseId')
+          [[ "$baseline_run" =~ ^[0-9]+$ ]]
+          printf 'run=%s\n' "$baseline_run" >> "$GITHUB_OUTPUT"
   build:
     needs: prepare
     environment: release
@@ -64,6 +88,7 @@ jobs:
       NEAR_DOT_UPDATE_REPO: ${{ github.repository }}
       NEAR_DOT_UPDATER_PUBLIC_KEY: ${{ vars.NEAR_DOT_UPDATER_PUBLIC_KEY }}
       RELEASE_TARGET: ${{ matrix.target }}
+      NEAR_DOT_OS_SIGNING: ${{ inputs.os_signing }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -98,10 +123,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          if (-not $env:WINDOWS_SIGNING_PFX_BASE64 -or -not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Protected signing is required.' }
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Protected updater signing is required.' }
+          $publisherSigned = $env:NEAR_DOT_OS_SIGNING -eq 'signed'
+          if ($publisherSigned -and -not $env:WINDOWS_SIGNING_PFX_BASE64) { throw 'Requested Authenticode certificate is missing.' }
           $env:NEAR_DOT_PFX_PATH = Join-Path $env:RUNNER_TEMP 'near-dot-signing.pfx'
           try {
-            [IO.File]::WriteAllBytes($env:NEAR_DOT_PFX_PATH, [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_BASE64))
+            if ($publisherSigned) { [IO.File]::WriteAllBytes($env:NEAR_DOT_PFX_PATH, [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_BASE64)) }
             npm run tauri -- build --ci --target $env:RELEASE_TARGET --bundles nsis --config release-config.json
             if ($LASTEXITCODE -ne 0) { throw 'Signed build failed.' }
             New-Item -ItemType Directory release-artifacts -Force | Out-Null
@@ -109,9 +136,9 @@ jobs:
             $installers = @(Get-ChildItem "src-tauri/target/$env:RELEASE_TARGET/release/bundle/nsis/*-setup.exe")
             if ($installers.Count -ne 1) { throw 'Expected one installer.' }
             $installer = $installers[0]
-            if ((Get-AuthenticodeSignature $installer.FullName).Status -ne 'Valid') { throw 'Installer Authenticode verification failed.' }
+            if ($publisherSigned -and (Get-AuthenticodeSignature $installer.FullName).Status -ne 'Valid') { throw 'Installer Authenticode verification failed.' }
             $binary = "src-tauri/target/$env:RELEASE_TARGET/release/near-dot.exe"
-            if ((Get-AuthenticodeSignature $binary).Status -ne 'Valid') { throw 'App Authenticode verification failed.' }
+            if ($publisherSigned -and (Get-AuthenticodeSignature $binary).Status -ne 'Valid') { throw 'App Authenticode verification failed.' }
             $numericVersion = $version.Split('-')[0]
             if (-not (Get-Item $binary).VersionInfo.ProductVersion.StartsWith($numericVersion)) { throw 'Windows version stamp mismatch.' }
             Copy-Item $installer.FullName "release-artifacts/NearDot-$version-windows-x86_64.exe"
@@ -129,9 +156,24 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: python3 scripts/prepare-mac-release.py "$RELEASE_TARGET"
+      - name: Download tested baseline installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_RUN: ${{ needs.prepare.outputs.baseline_run }}
+          BASELINE_ARTIFACT: review-${{ matrix.os }}
+        shell: bash
+        run: gh run download "$BASELINE_RUN" --name "$BASELINE_ARTIFACT" --dir previous
+      - name: Build isolated updater verification harness
+        shell: bash
+        run: cargo build --manifest-path src-tauri/Cargo.toml --locked --release --target "$RELEASE_TARGET" --example update-drill
+      - name: Verify installation, real updater, recovery and removal
+        env:
+          RELEASE_PLATFORM: ${{ matrix.platform }}
+        shell: bash
+        run: python scripts/install-update-drill.py "$RELEASE_PLATFORM" "$RELEASE_TARGET"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: signed-${{ matrix.platform }}
+          name: release-${{ matrix.platform }}
           path: release-artifacts/*
           if-no-files-found: error
           retention-days: 7
@@ -159,7 +201,7 @@ jobs:
       - run: npm ci
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: signed-*
+          pattern: release-*
           path: release-artifacts
           merge-multiple: true
       - name: Sign paused feed and compute checksums
@@ -171,6 +213,8 @@ jobs:
           node scripts/make-feed.mjs release-artifacts "$NEAR_DOT_UPDATE_REPO" "$RELEASE_CHANNEL" 0 --require-all
           npm run tauri -- signer sign "release-artifacts/$RELEASE_CHANNEL.json"
           node scripts/verify-signatures.mjs release-artifacts
+          cp updater-public-key.txt release-artifacts/
+          cp THIRD-PARTY-NOTICES.txt release-artifacts/
           node scripts/checksums.mjs release-artifacts
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:

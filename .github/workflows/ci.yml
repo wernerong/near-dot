@@ -37,6 +37,7 @@ jobs:
         run: python3 -m unittest discover -s experiments/dot-relay -p 'test_*.py' -v
       - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings
+      - run: cargo check --manifest-path src-tauri/Cargo.toml --locked --example update-drill
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - name: Check optional private Mac adapter
         if: runner.os == 'macOS'

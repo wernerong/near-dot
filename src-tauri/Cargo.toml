@@ -1,6 +1,6 @@
 [package]
 name = "near-dot"
-version = "0.3.0-preview.1"
+version = "1.0.0"
 description = "Independent local launcher for your existing dot"
 edition = "2021"
 rust-version = "1.95"

@@ -12,9 +12,9 @@
 
 **Settings are corrupt/newer.** The file is preserved and writes are blocked. Reset local settings creates a preserved backup and returns to defaults, with startup disabled. Keep backups private. For a future-schema error, first try a newer signed recovery release.
 
-**Update unavailable.** This development build intentionally has no production verification key/feed. A configured release may be staged, paused, skipped, offline or lack an artifact for your architecture. Use Check for updates to retry. Signature/checksum failure must never be worked around by disabling security. Use the release runbook's signed recovery path.
+**Update unavailable.** Development builds have no production verification key/feed; public release builds embed the verification public key. A configured release may be staged, paused, skipped, offline or lack an artifact for your architecture. Use Check for updates to retry. Signature/checksum failure must never be worked around by disabling security. Use the release runbook's signed recovery path.
 
-**SmartScreen/Gatekeeper.** Verify the source and signing publisher. A newly signed Windows binary may still have a reputation warning. Do not turn off OS protections. If OS policy blocks the app, stop and have the publisher resolve trusted distribution.
+**SmartScreen/Gatekeeper.** Version 1.0.0 has no verified Windows publisher or Mac Developer ID/notarization. Verify its GitHub release source and checksums. OS warnings or blocking are expected on some devices. Do not turn off OS protections. If OS policy blocks the app, stop and have the publisher resolve trusted distribution.
 
 ## Local data locations
 

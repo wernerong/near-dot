@@ -1,6 +1,6 @@
 # Acceptance evidence and release gate
 
-Recorded 4 October 2026 for the 0.2.0-preview.1 source preview. **Public binary release remains blocked.** The signed-release workflow and production update feed have not been activated.
+Historical evidence below was recorded 4 October 2026. Later sections track 0.3.0 preparation and the v1.0.0 release. Older blocked/pending entries describe that earlier revision, not a certification of current installers.
 
 ## Automated validation
 
@@ -99,3 +99,11 @@ This is a locally prepared candidate, not a public binary release. The previous 
 The [onboarding screenshot](onboarding-preview.png) is labelled as a synthetic UI demonstration. It contains no personal URL or identity. [Installation instructions](INSTALL.md) describe the one-time per-device launcher setup and the circumstances that can require reauthentication or retesting a link. This does not promise a permanent authenticated dot connection.
 
 Do not claim stable public support for Windows or Mac until the signed device checklists pass. Publication, update-channel activation and signing/account costs remain behind final review.
+
+## v1.0.0 release candidate
+
+The owner approved public v1.0.0 based on 0.3.0 and explicitly selected the reference widget's unsigned OS installer model. Windows Authenticode and Mac notarization are absent; no costs were incurred. Mandatory updater cryptographic verification remains enabled.
+
+Local candidate checks: 20 TypeScript tests, 15 Rust tests, browser UI/accessibility checks, native compilation of the isolated updater harness, formatting/Clippy and public-source scans. Hosted Windows x64, Mac arm64 and Intel checks plus the real install/update drill must complete before publishing the draft. This paragraph records the gate, not a claimed successful run; the published workflow logs are the execution evidence.
+
+The release drill uses the actual successful 0.3.0 installer artifacts, synthetic preferences and the real Tauri updater against HTTPS on loopback. It covers altered/truncated package rejection, upgrade to v1.0.0, preservation of preferences, recovery reinstall and executable removal. It does not prove power-loss recovery mid-install, a live desktop restart, login-item cleanup, native screen-reader behavior or new ChatGPT integration. The private installed connection is not touched by these tests.

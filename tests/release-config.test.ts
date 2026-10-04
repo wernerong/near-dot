@@ -40,6 +40,7 @@ function fixture() {
     join(dir, "src-tauri/Cargo.toml"),
     '[package]\nversion = "0.1.0"\n',
   );
+  writeFileSync(join(dir, "updater-public-key.txt"), syntheticPublic + "\n");
   return dir;
 }
 const publicBytes = Buffer.alloc(42);
@@ -47,13 +48,14 @@ publicBytes.write("Ed");
 const syntheticPublic = Buffer.from(
   `untrusted comment: minisign public key synthetic\n${publicBytes.toString("base64")}\n`,
 ).toString("base64");
-function run(dir: string, key: string) {
+function run(dir: string, key: string, mode = "signed") {
   return spawnSync(process.execPath, ["config.mjs"], {
     cwd: dir,
     encoding: "utf8",
     env: {
       NEAR_DOT_UPDATE_REPO: "example/near-dot",
       NEAR_DOT_UPDATER_PUBLIC_KEY: key,
+      NEAR_DOT_OS_SIGNING: mode,
     },
   });
 }
@@ -120,6 +122,24 @@ it("release generator accepts Windows CRLF manifests and lockfiles", () => {
       writeFileSync(path, readFileSync(path, "utf8").replace(/\n/g, "\r\n"));
     }
     expect(run(dir, syntheticPublic).status).toBe(0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("unsigned OS distribution still requires signed updater artifacts and versions", () => {
+  const dir = fixture();
+  try {
+    expect(run(dir, syntheticPublic, "unsigned").status).toBe(0);
+    const config = JSON.parse(
+      readFileSync(join(dir, "release-config.json"), "utf8"),
+    );
+    expect(config.bundle.createUpdaterArtifacts).toBe(true);
+    expect(config.plugins.updater.requireSignedVersion).toBe(true);
+    expect(config.plugins.updater.pubkey).toBe(syntheticPublic);
+    expect(config.bundle.windows?.signCommand).toBeUndefined();
+    expect(run(dir, "", "unsigned").status).not.toBe(0);
+    expect(run(dir, syntheticPublic, "unknown").status).not.toBe(0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -16,3 +16,4 @@ docs/local-evidence/
 local-evidence/
 __pycache__/
 *.pyc
+previous/
