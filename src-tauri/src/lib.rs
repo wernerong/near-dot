@@ -1,0 +1,649 @@
+mod avatar;
+mod destination;
+mod geometry;
+mod preferences;
+mod startup;
+mod updates;
+
+use preferences::Preferences;
+use std::{
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+    time::Duration,
+};
+use tauri::{Emitter, LogicalSize, Manager, PhysicalPosition, WebviewWindow, WindowEvent};
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_opener::OpenerExt;
+
+static STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+static START_RECORDED: AtomicBool = AtomicBool::new(false);
+fn measure_startup() {
+    if std::env::args().any(|a| a == "--measure-startup")
+        && !START_RECORDED.swap(true, Ordering::Relaxed)
+    {
+        if let Some(t) = STARTED.get() {
+            eprintln!("NEAR_DOT_STARTUP_MS={}", t.elapsed().as_millis());
+        }
+    }
+}
+
+pub struct AppState {
+    avatar: Mutex<avatar::View>,
+    avatar_operation: tokio::sync::Mutex<()>,
+    preferences: Mutex<Preferences>,
+    path: PathBuf,
+    load_error: Mutex<Option<String>>,
+    shortcut_warning: Mutex<Option<String>>,
+    hidden: AtomicBool,
+    pending: Mutex<Option<updates::Pending>>,
+    update_lock: tokio::sync::Mutex<()>,
+    restart_ready: AtomicBool,
+    update_status: Mutex<Option<updates::Status>>,
+    position_dirty: AtomicBool,
+    last_move: Mutex<std::time::Instant>,
+}
+fn avatar_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|p| p.join("avatar.png"))
+        .map_err(|_| "Local image directory is unavailable.".into())
+}
+#[tauri::command]
+fn get_avatar(w: WebviewWindow, app: tauri::AppHandle) -> Result<avatar::View, String> {
+    known(&w)?;
+    Ok(app.state::<AppState>().avatar.lock().unwrap().clone())
+}
+#[tauri::command]
+async fn import_avatar(w: WebviewWindow, app: tauri::AppHandle) -> Result<avatar::View, String> {
+    settings_only(&w)?;
+    let state = app.state::<AppState>();
+    let _operation = state.avatar_operation.lock().await;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Choose a local companion image")
+        .add_filter("Still PNG image", &["png"])
+        .pick_file(move |file| {
+            let _ = sender.send(file);
+        });
+    let file = receiver
+        .await
+        .map_err(|_| "Image selection could not finish.")?;
+    let Some(file) = file else {
+        return Ok(state.avatar.lock().unwrap().clone());
+    };
+    let source = file.into_path().map_err(|_| "Choose a local image file.")?;
+    let destination = avatar_path(&app)?;
+    let view = tauri::async_runtime::spawn_blocking(move || avatar::import(&source, &destination))
+        .await
+        .map_err(|_| "Image could not be prepared.")??;
+    *app.state::<AppState>().avatar.lock().unwrap() = view.clone();
+    let _ = app.emit("avatar-changed", view.clone());
+    Ok(view)
+}
+#[tauri::command]
+async fn reset_avatar(w: WebviewWindow, app: tauri::AppHandle) -> Result<avatar::View, String> {
+    settings_only(&w)?;
+    let state = app.state::<AppState>();
+    let _operation = state.avatar_operation.lock().await;
+    let path = avatar_path(&app)?;
+    let view = tauri::async_runtime::spawn_blocking(move || avatar::reset(&path))
+        .await
+        .map_err(|_| "Default image could not be restored.")??;
+    *app.state::<AppState>().avatar.lock().unwrap() = view.clone();
+    let _ = app.emit("avatar-changed", view.clone());
+    Ok(view)
+}
+fn settings_only(w: &WebviewWindow) -> Result<(), String> {
+    known(w)?;
+    if w.label() == "settings" {
+        Ok(())
+    } else {
+        Err("This action is available in Settings.".into())
+    }
+}
+fn known(w: &WebviewWindow) -> Result<(), String> {
+    let url = w
+        .url()
+        .map_err(|_| "Window origin could not be verified.")?;
+    let local = (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
+        || (matches!(url.scheme(), "http" | "https") && url.host_str() == Some("tauri.localhost"));
+    let dev = cfg!(debug_assertions)
+        && url.scheme() == "http"
+        && url.host_str() == Some("127.0.0.1")
+        && url.port() == Some(1420);
+    if !local && !dev {
+        return Err("OS actions require the packaged local UI.".into());
+    }
+    if ["settings", "companion"].contains(&w.label()) {
+        Ok(())
+    } else {
+        Err("Unknown window.".into())
+    }
+}
+fn show_settings(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+fn launch(app: &tauri::AppHandle) -> Result<(), String> {
+    let p = app.state::<AppState>().preferences.lock().unwrap().clone();
+    if !p.verified || p.destination.is_empty() {
+        show_settings(app);
+        return Err("Save a locally tested destination first.".into());
+    }
+    let url = destination::validate(&p.destination)?;
+    app.opener().open_url(url, None::<&str>).map_err(|_| {
+        "The default browser could not open the destination. Check your OS browser settings.".into()
+    })
+}
+fn areas(w: &WebviewWindow) -> Vec<geometry::Rect> {
+    w.available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .map(|m| {
+            let a = m.work_area();
+            geometry::Rect {
+                x: a.position.x,
+                y: a.position.y,
+                width: a.size.width,
+                height: a.size.height,
+            }
+        })
+        .collect()
+}
+fn recover(app: &tauri::AppHandle, reset: bool) {
+    let Some(w) = app.get_webview_window("companion") else {
+        return;
+    };
+    let areas = areas(&w);
+    let size = w.outer_size().ok();
+    let pos = if reset {
+        areas.first().map(|a| {
+            (
+                a.x.saturating_add(a.width as i32).saturating_sub(230),
+                a.y.saturating_add(a.height as i32).saturating_sub(240),
+            )
+        })
+    } else {
+        w.outer_position().ok().map(|p| (p.x, p.y))
+    };
+    if let (Some(pos), Some(size)) = (pos, size) {
+        let xy = geometry::recover(pos, (size.width, size.height), &areas);
+        if xy != pos || reset {
+            let _ = w.set_position(PhysicalPosition::new(xy.0, xy.1));
+        }
+        app.state::<AppState>().preferences.lock().unwrap().position = Some(xy);
+    }
+}
+fn persist(app: &tauri::AppHandle) -> Result<(), String> {
+    let s = app.state::<AppState>();
+    if s.load_error.lock().unwrap().is_some() {
+        return Err("Repair settings before saving; the original is preserved.".into());
+    }
+    let result = preferences::save(&s.path, &s.preferences.lock().unwrap());
+    result
+}
+fn companion_data(app: &tauri::AppHandle) -> serde_json::Value {
+    let s = app.state::<AppState>();
+    let p = s.preferences.lock().unwrap();
+    serde_json::json!({"size":p.size,"opacity":p.opacity,"paused":p.paused,"hidden":s.hidden.load(Ordering::Relaxed),"configured":p.verified})
+}
+fn changed(app: &tauri::AppHandle) {
+    let _ = app.emit_to("companion", "companion-config", companion_data(app));
+    let _ = app.emit_to("settings", "preferences-changed", ());
+}
+fn toggle(app: &tauri::AppHandle) {
+    let s = app.state::<AppState>();
+    let hide = !s.hidden.load(Ordering::Relaxed);
+    s.hidden.store(hide, Ordering::Relaxed);
+    if let Some(w) = app.get_webview_window("companion") {
+        if hide {
+            let _ = w.hide();
+        } else {
+            recover(app, false);
+            let _ = w.show();
+        }
+    }
+    changed(app);
+}
+#[tauri::command]
+fn get_preferences(w: WebviewWindow, app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    settings_only(&w)?;
+    measure_startup();
+    let s = app.state::<AppState>();
+    Ok(
+        serde_json::json!({"preferences":s.preferences.lock().unwrap().clone(),"warning":s.load_error.lock().unwrap().clone().or(s.shortcut_warning.lock().unwrap().clone()),"version":app.package_info().version.to_string(),"updatesConfigured":option_env!("NEAR_DOT_UPDATE_REPO").is_some(),"updateStatus":s.update_status.lock().unwrap().clone()}),
+    )
+}
+#[tauri::command]
+fn get_companion(w: WebviewWindow, app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    known(&w)?;
+    measure_startup();
+    Ok(companion_data(&app))
+}
+#[tauri::command]
+fn open_destination(w: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    known(&w)?;
+    launch(&app)
+}
+#[tauri::command]
+fn test_destination(w: WebviewWindow, app: tauri::AppHandle, url: String) -> Result<(), String> {
+    settings_only(&w)?;
+    let url = destination::validate(&url)?;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|_| "Browser launch failed.".into())
+}
+#[tauri::command]
+fn save_preferences(
+    w: WebviewWindow,
+    app: tauri::AppHandle,
+    mut preferences: Preferences,
+) -> Result<(), String> {
+    settings_only(&w)?;
+    preferences.validate()?;
+    let s = app.state::<AppState>();
+    if s.load_error.lock().unwrap().is_some() {
+        return Err("Repair settings first; the original file is preserved.".into());
+    }
+    let old = s.preferences.lock().unwrap().clone();
+    preferences.position = old.position;
+    preferences.cohort = old.cohort;
+    if !preferences.destination.is_empty() {
+        preferences.destination = destination::validate(&preferences.destination)?;
+    }
+    let shortcut_changed = old.shortcut != preferences.shortcut;
+    if shortcut_changed && !preferences.shortcut.is_empty() {
+        app.global_shortcut().register(preferences.shortcut.as_str()).map_err(|_|"Shortcut is invalid or already in use. Choose another; your previous shortcut is still active.")?;
+    }
+    if preferences.startup != old.startup {
+        let result = startup::set(&app, preferences.startup);
+        if result.is_err() {
+            if shortcut_changed && !preferences.shortcut.is_empty() {
+                let _ = app
+                    .global_shortcut()
+                    .unregister(preferences.shortcut.as_str());
+            }
+            return Err(
+                "Startup setting could not be changed. Check OS login-item permissions.".into(),
+            );
+        }
+    }
+    if let Err(e) = preferences::save(&s.path, &preferences) {
+        if shortcut_changed && !preferences.shortcut.is_empty() {
+            let _ = app
+                .global_shortcut()
+                .unregister(preferences.shortcut.as_str());
+        }
+        let _ = startup::set(&app, old.startup);
+        return Err(e);
+    }
+    if shortcut_changed && !old.shortcut.is_empty() {
+        let _ = app.global_shortcut().unregister(old.shortcut.as_str());
+    }
+    if let Some(pet) = app.get_webview_window("companion") {
+        let _ = pet.set_always_on_top(preferences.always_on_top);
+        let _ = pet.set_size(LogicalSize::new(
+            preferences.size as f64,
+            preferences.size as f64 + 20.,
+        ));
+    }
+    *s.preferences.lock().unwrap() = preferences;
+    if shortcut_changed {
+        *s.shortcut_warning.lock().unwrap() = None;
+    }
+    recover(&app, false);
+    changed(&app);
+    Ok(())
+}
+#[tauri::command]
+fn repair_preferences(w: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    settings_only(&w)?;
+    let s = app.state::<AppState>();
+    if s.path.exists() {
+        std::fs::copy(&s.path, s.path.with_extension("preserved.json"))
+            .map_err(|_| "Original settings could not be preserved.")?;
+    }
+    startup::set(&app, false)?;
+    let _ = app.global_shortcut().unregister_all();
+    let p = Preferences {
+        shortcut: String::new(),
+        ..Default::default()
+    };
+    preferences::save(&s.path, &p)?;
+    *s.preferences.lock().unwrap() = p;
+    *s.load_error.lock().unwrap() = None;
+    *s.shortcut_warning.lock().unwrap() = None;
+    recover(&app, true);
+    changed(&app);
+    Ok(())
+}
+#[tauri::command]
+fn companion_action(w: WebviewWindow, app: tauri::AppHandle, action: String) -> Result<(), String> {
+    known(&w)?;
+    match action.as_str() {
+        "settings" => show_settings(&app),
+        "toggle" => toggle(&app),
+        "drag" => {
+            if w.label() != "companion" {
+                return Err("Drag is available on the companion.".into());
+            }
+            w.start_dragging()
+                .map_err(|_| "Could not start dragging.")?;
+        }
+        "recover" => recover(&app, true),
+        "drag-finished" => {
+            recover(&app, false);
+            persist(&app)?;
+        }
+        "quit" => {
+            let _ = persist(&app);
+            app.exit(0);
+        }
+        _ => return Err("Unknown action.".into()),
+    }
+    Ok(())
+}
+#[tauri::command]
+async fn check_update(w: WebviewWindow, app: tauri::AppHandle) -> Result<updates::Status, String> {
+    settings_only(&w)?;
+    let result = updates::check(&app, true).await;
+    if let Ok(status) = &result {
+        *app.state::<AppState>().update_status.lock().unwrap() = Some(status.clone());
+    }
+    result
+}
+#[tauri::command]
+async fn install_update(w: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    settings_only(&w)?;
+    updates::install(&app).await
+}
+#[tauri::command]
+fn restart_after_update(w: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    settings_only(&w)?;
+    if !app
+        .state::<AppState>()
+        .restart_ready
+        .load(Ordering::Relaxed)
+    {
+        return Err("No installed update awaits restart.".into());
+    }
+    let _ = persist(&app);
+    app.restart();
+}
+fn tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    let items = [
+        ("open", "Open my dot"),
+        ("toggle", "Hide / show companion"),
+        ("pause", "Pause / resume animation"),
+        ("recover", "Reset position"),
+        ("settings", "Settings and updates"),
+        ("quit", "Quit"),
+    ]
+    .iter()
+    .map(|(id, text)| MenuItem::with_id(app, *id, *text, true, None::<&str>))
+    .collect::<tauri::Result<Vec<_>>>()?;
+    let refs = items
+        .iter()
+        .map(|m| m as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
+        .collect::<Vec<_>>();
+    let menu = Menu::with_items(app, &refs)?;
+    tauri::tray::TrayIconBuilder::with_id("near-dot")
+        .icon(app.default_window_icon().unwrap().clone())
+        .tooltip("Near Dot • Independent launcher")
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app, e| match e.id.as_ref() {
+            "open" => {
+                if let Err(message) = launch(app) {
+                    show_settings(app);
+                    let _ = app.emit_to("settings", "app-error", message);
+                }
+            }
+            "toggle" => toggle(app),
+            "recover" => {
+                recover(app, true);
+                let _ = persist(app);
+            }
+            "settings" => show_settings(app),
+            "pause" => {
+                let s = app.state::<AppState>();
+                {
+                    let mut p = s.preferences.lock().unwrap();
+                    p.paused = !p.paused;
+                }
+                let _ = persist(app);
+                changed(app);
+            }
+            "quit" => {
+                let _ = persist(app);
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .build(app)?;
+    Ok(())
+}
+pub fn run() {
+    let _ = STARTED.set(std::time::Instant::now());
+    tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            show_settings(app)
+        }))
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .app_name("Near Dot")
+                .arg("--autostart")
+                .build(),
+        )
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        if let Err(message) = launch(app) {
+                            show_settings(app);
+                            let _ = app.emit_to("settings", "app-error", message);
+                        }
+                    }
+                })
+                .build(),
+        )
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            let path = app.path().app_config_dir()?.join("preferences.json");
+            let (mut p, error) = match preferences::load(&path) {
+                Ok(p) => (p, None),
+                Err(e) => (Preferences::default(), Some(e)),
+            };
+            if !path.exists() {
+                // Persist a random local rollout bucket; it is never transmitted.
+                p.cohort = (std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .subsec_nanos()
+                    % 100) as u8;
+            }
+            let warning = if !p.shortcut.is_empty()
+                && app.global_shortcut().register(p.shortcut.as_str()).is_err()
+            {
+                Some(
+                    "The configured shortcut is unavailable. Use Settings to choose another."
+                        .into(),
+                )
+            } else {
+                None
+            };
+            app.manage(AppState {
+                avatar: Mutex::new(avatar::load(&path.with_file_name("avatar.png"))),
+                avatar_operation: tokio::sync::Mutex::new(()),
+                preferences: Mutex::new(p.clone()),
+                path,
+                load_error: Mutex::new(error),
+                shortcut_warning: Mutex::new(warning),
+                hidden: AtomicBool::new(false),
+                pending: Mutex::new(None),
+                update_lock: tokio::sync::Mutex::new(()),
+                restart_ready: AtomicBool::new(false),
+                update_status: Mutex::new(None),
+                position_dirty: AtomicBool::new(false),
+                last_move: Mutex::new(std::time::Instant::now()),
+            });
+            let pet = app.get_webview_window("companion").unwrap();
+            pet.set_size(LogicalSize::new(p.size as f64, p.size as f64 + 20.))?;
+            pet.set_always_on_top(p.always_on_top)?;
+            if let Some((x, y)) = p.position {
+                pet.set_position(PhysicalPosition::new(x, y))?;
+            }
+            recover(app.handle(), p.position.is_none());
+            tray(app.handle())?;
+            let manual_install = p.unattended_next_launch
+                && !std::env::args().any(|a| a == "--autostart" || a == "--no-unattended")
+                && app.state::<AppState>().load_error.lock().unwrap().is_none();
+            if !manual_install {
+                pet.show()?;
+            }
+            if !manual_install
+                && (!p.verified || app.state::<AppState>().load_error.lock().unwrap().is_some())
+            {
+                show_settings(app.handle());
+            }
+            if manual_install {
+                // One-shot opt-in: clear before attempting installation so restart cannot loop.
+                app.state::<AppState>()
+                    .preferences
+                    .lock()
+                    .unwrap()
+                    .unattended_next_launch = false;
+                persist(app.handle())?;
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let result = async {
+                        let status = updates::check(&handle, false).await?;
+                        if status.state == "available" {
+                            updates::install(&handle).await?;
+                            handle.restart();
+                        }
+                        Ok::<(), String>(())
+                    }
+                    .await;
+                    if let Err(notes) = result {
+                        *handle.state::<AppState>().update_status.lock().unwrap() =
+                            Some(updates::Status {
+                                state: "error".into(),
+                                notes,
+                                ..Default::default()
+                            });
+                        show_settings(&handle);
+                    }
+                    if let Some(w) = handle.get_webview_window("companion") {
+                        let _ = w.show();
+                    }
+                    if !handle
+                        .state::<AppState>()
+                        .preferences
+                        .lock()
+                        .unwrap()
+                        .verified
+                    {
+                        show_settings(&handle);
+                    }
+                    changed(&handle);
+                });
+            }
+            let _ = persist(app.handle());
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let mut ticks = 0u8;
+                loop {
+                    std::thread::sleep(Duration::from_secs(1));
+                    ticks = (ticks + 1) % 15;
+                    if ticks == 0 {
+                        recover(&handle, false);
+                    }
+                    let s = handle.state::<AppState>();
+                    if s.position_dirty.load(Ordering::Relaxed)
+                        && s.last_move.lock().unwrap().elapsed() >= Duration::from_millis(500)
+                    {
+                        s.position_dirty.store(false, Ordering::Relaxed);
+                        recover(&handle, false);
+                        let _ = persist(&handle);
+                    }
+                }
+            });
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(30)).await;
+                loop {
+                    if handle
+                        .state::<AppState>()
+                        .preferences
+                        .lock()
+                        .unwrap()
+                        .auto_check
+                    {
+                        let status = match updates::check(&handle, false).await {
+                            Ok(s) => s,
+                            Err(e) => updates::Status {
+                                state: "error".into(),
+                                notes: e,
+                                ..Default::default()
+                            },
+                        };
+                        *handle.state::<AppState>().update_status.lock().unwrap() =
+                            Some(status.clone());
+                        let _ = handle.emit_to("settings", "update-status", status);
+                    }
+                    tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
+                }
+            });
+            Ok(())
+        })
+        .on_window_event(|w, e| {
+            if let WindowEvent::Moved(pos) = e {
+                if w.label() == "companion" {
+                    if let Some(s) = w.app_handle().try_state::<AppState>() {
+                        s.preferences.lock().unwrap().position = Some((pos.x, pos.y));
+                        *s.last_move.lock().unwrap() = std::time::Instant::now();
+                        s.position_dirty.store(true, Ordering::Relaxed);
+                    }
+                }
+            }
+            if let WindowEvent::CloseRequested { api, .. } = e {
+                api.prevent_close();
+                if w.label() == "settings" {
+                    let _ = w.hide();
+                } else {
+                    toggle(w.app_handle());
+                }
+            }
+            if matches!(e, WindowEvent::ScaleFactorChanged { .. }) && w.label() == "companion" {
+                recover(w.app_handle(), false);
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_avatar,
+            import_avatar,
+            reset_avatar,
+            get_preferences,
+            get_companion,
+            save_preferences,
+            repair_preferences,
+            open_destination,
+            test_destination,
+            companion_action,
+            check_update,
+            install_update,
+            restart_after_update
+        ])
+        .run(tauri::generate_context!())
+        .expect("Near Dot could not start");
+}

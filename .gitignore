@@ -1,0 +1,15 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+test-results/
+playwright-report/
+.DS_Store
+*.key
+*.pem
+*.p12
+*.pfx
+.env*
+release-config.json
+release-artifacts/
+docs/local-evidence/
