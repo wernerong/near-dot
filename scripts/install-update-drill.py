@@ -38,7 +38,8 @@ def digest(path):
 def wait_windows_installer(temp_name):
     # Tauri's Windows installer launch is asynchronous. Wait only for processes
     # carrying this disposable test directory, never unrelated applications.
-    script = """+    do {
+    script = """
+    do {
       $matching = @(Get-CimInstance Win32_Process | Where-Object {
         $_.CommandLine -and $_.CommandLine.Contains($env:NEAR_DOT_DRILL_TEMP_NAME)
       })
