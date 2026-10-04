@@ -35,6 +35,22 @@ def run(args, **kwargs):
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
+def wait_windows_installer(temp_name):
+    # Tauri's Windows installer launch is asynchronous. Wait only for processes
+    # carrying this disposable test directory, never unrelated applications.
+    script = """+    do {
+      $matching = @(Get-CimInstance Win32_Process | Where-Object {
+        $_.CommandLine -and $_.CommandLine.Contains($env:NEAR_DOT_DRILL_TEMP_NAME)
+      })
+      foreach ($item in $matching) {
+        Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue |
+          Wait-Process -Timeout 120 -ErrorAction Stop
+      }
+    } while ($matching.Count -gt 0)
+    """
+    run(['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
+        env={**os.environ, 'NEAR_DOT_DRILL_TEMP_NAME': temp_name}, timeout=150)
+
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *_):
         pass
@@ -97,6 +113,8 @@ with tempfile.TemporaryDirectory(prefix='neardot-release-drill-') as temp:
             assert digest(preferences)==before_preferences, 'Invalid update changed preferences'
         (root/'package').write_bytes(original)
         run(command,timeout=150)
+        if windows:
+            wait_windows_installer(root.name)
         deadline=time.monotonic()+120
         while time.monotonic()<deadline and digest(executable)==before_executable:
             time.sleep(0.5)
