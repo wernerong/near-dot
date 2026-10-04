@@ -4,6 +4,10 @@ use tauri_plugin_updater::UpdaterExt;
 
 fn main() {
     let args: Vec<_> = std::env::args().collect();
+    if args.len() == 2 && args[1] == "--self-test" {
+        println!("Native updater harness loaded.");
+        return;
+    }
     assert_eq!(
         args.len(),
         5,

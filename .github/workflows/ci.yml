@@ -66,7 +66,11 @@ jobs:
       - if: steps.changes.outputs.native == 'true'
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings
       - if: steps.changes.outputs.native == 'true'
-        run: cargo check --manifest-path src-tauri/Cargo.toml --locked --example update-drill
+        run: cargo build --manifest-path src-tauri/Cargo.toml --locked --example update-drill
+      - name: Verify native updater harness starts
+        if: steps.changes.outputs.native == 'true'
+        shell: bash
+        run: ./src-tauri/target/debug/examples/update-drill --self-test
       - if: steps.changes.outputs.native == 'true'
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - name: Check optional private Mac adapter
