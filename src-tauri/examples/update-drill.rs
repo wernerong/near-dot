@@ -54,8 +54,8 @@ fn main() {
                 .await;
                 match result {
                     Ok(()) => handle.exit(0),
-                    Err(_) => {
-                        eprintln!("Updater rejected the test package or installation failed.");
+                    Err(error) => {
+                        eprintln!("Isolated updater drill failed: {error:?}");
                         handle.exit(1);
                     }
                 }

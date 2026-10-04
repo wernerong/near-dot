@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Reviewed existing version tag, e.g. v1.0.0"
+        description: "Release tag from reviewed main, e.g. v1.0.0"
         required: true
       baseline_tag:
         description: "Tested prior installer tag for the upgrade drill"
@@ -42,14 +42,17 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22.22.2"
-      - name: Select reviewed ancestor tag and pin its commit
+      - name: Pin reviewed main or an existing ancestor tag
         id: tag
         shell: bash
         run: |
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
-          git merge-base --is-ancestor "$RELEASE_TAG" HEAD
-          candidate_commit=$(git rev-parse "$RELEASE_TAG^{commit}")
+          candidate_commit=$(git rev-parse HEAD)
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            git merge-base --is-ancestor "$RELEASE_TAG" HEAD
+            candidate_commit=$(git rev-parse "$RELEASE_TAG^{commit}")
+          fi
           git checkout --detach "$candidate_commit"
           node scripts/versions.mjs
           node --input-type=module -e 'import fs from "node:fs"; const v=JSON.parse(fs.readFileSync("package.json")).version; if(process.env.RELEASE_TAG!==`v${v}` || (process.env.RELEASE_CHANNEL==="stable" && v.includes("-")) || !fs.existsSync(`docs/releases/${v}.md`)) throw Error("Release version/channel/notes mismatch");'
@@ -61,6 +64,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          candidate_run=$(gh run list --workflow ci.yml --commit "${{ steps.tag.outputs.commit }}" --status success --json databaseId --jq '.[0].databaseId')
+          [[ "$candidate_run" =~ ^[0-9]+$ ]]
           [[ "$BASELINE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
           git merge-base --is-ancestor "$BASELINE_TAG" HEAD
           baseline_commit=$(git rev-parse "$BASELINE_TAG^{commit}")
@@ -102,16 +107,9 @@ jobs:
           toolchain: "1.95.0"
           components: clippy, rustfmt
       - run: npm ci
-      - run: npm run check
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
-      - run: npm audit --audit-level=moderate
-      - run: cargo install cargo-audit --version 0.22.2 --locked
-      - run: cargo audit --file src-tauri/Cargo.lock
+      # The prepare job requires successful exact-commit CI for unit/UI/audit checks.
+      # This job exercises production configuration and actual installation below.
       - run: python scripts/scan-public.py
-      - run: python scripts/run-gitleaks.py
-      - run: npx playwright install chromium
-      - run: npm run test:ui
       - name: Generate public configuration
         run: npm run release:config
       - name: Build and verify Windows installer
@@ -187,6 +185,7 @@ jobs:
       attestations: write
     env:
       RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_COMMIT: ${{ needs.prepare.outputs.commit }}
       RELEASE_CHANNEL: ${{ inputs.channel }}
       NEAR_DOT_UPDATE_REPO: ${{ github.repository }}
       NEAR_DOT_UPDATER_PUBLIC_KEY: ${{ vars.NEAR_DOT_UPDATER_PUBLIC_KEY }}
@@ -226,7 +225,7 @@ jobs:
           set -euo pipefail
           version=$(node --input-type=module -e 'import {checkVersions} from "./scripts/versions.mjs"; console.log(checkVersions());')
           if [[ "$RELEASE_CHANNEL" == 'preview' ]]; then
-            gh release create "$RELEASE_TAG" release-artifacts/* --verify-tag --draft --prerelease --title "Near Dot $version preview" --notes-file "docs/releases/$version.md"
+            gh release create "$RELEASE_TAG" release-artifacts/* --target "$RELEASE_COMMIT" --draft --prerelease --title "Near Dot $version preview" --notes-file "docs/releases/$version.md"
           else
-            gh release create "$RELEASE_TAG" release-artifacts/* --verify-tag --draft --title "Near Dot $version" --notes-file "docs/releases/$version.md"
+            gh release create "$RELEASE_TAG" release-artifacts/* --target "$RELEASE_COMMIT" --draft --title "Near Dot $version" --notes-file "docs/releases/$version.md"
           fi

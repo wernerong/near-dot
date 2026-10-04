@@ -73,12 +73,16 @@ with tempfile.TemporaryDirectory(prefix='neardot-release-drill-') as temp:
         assert executable.is_file(), 'Baseline executable missing'
         before_executable = digest(executable)
         # The TLS private key is ephemeral test material, unrelated to updater signing.
-        run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',root/'tls.key','-out',root/'ca.pem','-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        quiet = {'stdout':subprocess.DEVNULL,'stderr':subprocess.DEVNULL}
+        run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',root/'ca.key','-out',root/'ca.pem','-days','1','-subj','/CN=Near Dot ephemeral test CA','-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign'],**quiet)
+        run(['openssl','req','-new','-newkey','rsa:2048','-nodes','-keyout',root/'tls.key','-out',root/'server.csr','-subj','/CN=127.0.0.1'],**quiet)
+        (root/'server.ext').write_text('basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=IP:127.0.0.1\n')
+        run(['openssl','x509','-req','-in',root/'server.csr','-CA',root/'ca.pem','-CAkey',root/'ca.key','-CAcreateserial','-out',root/'server.pem','-days','1','-extfile',root/'server.ext'],**quiet)
         (root/'public-key.txt').write_text(public_key)
         feed = {'version':version,'platforms':{platform:{'url':'','signature':signature}}}
         server = http.server.ThreadingHTTPServer(('127.0.0.1',0), functools.partial(QuietHandler,directory=root))
         tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        tls.load_cert_chain(root/'ca.pem',root/'tls.key')
+        tls.load_cert_chain(root/'server.pem',root/'tls.key')
         server.socket=tls.wrap_socket(server.socket,server_side=True)
         endpoint=f'https://127.0.0.1:{server.server_port}'
         feed['platforms'][platform]['url']=endpoint+'/package'
