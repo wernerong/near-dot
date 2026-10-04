@@ -94,8 +94,9 @@ with tempfile.TemporaryDirectory(prefix='neardot-release-drill-') as temp:
         # Both a complete altered package and an interrupted/truncated download must be rejected.
         for invalid in [bytes([original[0]^1])+original[1:],original[:64]]:
             (root/'package').write_bytes(invalid)
-            result=subprocess.run(command,timeout=120)
-            assert result.returncode != 0, 'Invalid updater package was accepted'
+            result=subprocess.run(command,timeout=120,capture_output=True,text=True)
+            assert result.returncode == 1 and 'Minisign(InvalidSignature)' in result.stderr, f'Expected cryptographic rejection, not a runner failure: exit {result.returncode}; {result.stderr}'
+            print('Confirmed Tauri rejection: Minisign(InvalidSignature)')
             assert digest(executable)==before_executable, 'Invalid update replaced the app'
             assert digest(preferences)==before_preferences, 'Invalid update changed preferences'
         (root/'package').write_bytes(original)

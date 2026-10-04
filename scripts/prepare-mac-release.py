@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix="near-dot-signing-", dir=os.environ.get(
             if name.startswith("APPLE_"):
                 env.pop(name, None)
         env["APPLE_SIGNING_IDENTITY"] = "-"
-    subprocess.run(["npm", "run", "tauri", "--", "build", "--ci", "--target", target, "--bundles", "app,dmg", "--config", "release-config.json"], env=env, check=True)
+    subprocess.run(["npm", "run", "tauri", "--", "build", "--ci", "--verbose", "--target", target, "--bundles", "app,dmg", "--config", "release-config.json"], env=env, check=True)
     app = base / "macos/Near Dot.app"
     with (app / "Contents/Info.plist").open("rb") as file:
         info = plistlib.load(file)
