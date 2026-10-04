@@ -2,7 +2,7 @@
 
 An independent, local desktop companion that opens your existing dot with a click or shortcut. Phase 1 targets **Windows x64 and Mac**; the iPhone companion is an Apple Shortcuts recipe.
 
-**Status: working development project, not cleared for public binary release.** No public release, paid signing service, account, backend or OpenAI API billing has been created. See [acceptance evidence](docs/ACCEPTANCE.md) before treating any platform as supported.
+**Status: source-only development preview, not cleared for public binary release.** The initial public release contains source and a checksum, with no signed installers or configured update feed. No paid signing service, launcher account, backend or OpenAI API billing has been created. See [acceptance evidence](docs/ACCEPTANCE.md) before treating any platform as supported.
 
 ![Settings browser preview, without personal links](docs/settings-preview.png)
 
