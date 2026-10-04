@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 const semver =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([a-zA-Z0-9]+(?:[.-][a-zA-Z0-9]+)*))?$/;
 export function versions(root = ".") {
-  const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
+  const read = (p) =>
+    fs.readFileSync(path.join(root, p), "utf8").replace(/\r\n/g, "\n");
   const pkg = JSON.parse(read("package.json"));
   const lock = JSON.parse(read("package-lock.json"));
   const cargoLock = read("src-tauri/Cargo.lock").match(
@@ -57,6 +58,7 @@ function setVersion(version) {
     lock,
     fs
       .readFileSync(lock, "utf8")
+      .replace(/\r\n/g, "\n")
       .replace(
         /(\[\[package\]\]\nname = "near-dot"\nversion = ")[^"]+"/,
         `$1${version}"`,

@@ -111,3 +111,16 @@ it("release generator also blocks stale lockfiles", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+it("release generator accepts Windows CRLF manifests and lockfiles", () => {
+  const dir = fixture();
+  try {
+    for (const file of ["src-tauri/Cargo.toml", "src-tauri/Cargo.lock"]) {
+      const path = join(dir, file);
+      writeFileSync(path, readFileSync(path, "utf8").replace(/\n/g, "\r\n"));
+    }
+    expect(run(dir, syntheticPublic).status).toBe(0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
