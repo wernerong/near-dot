@@ -109,3 +109,21 @@ Local candidate checks: 21 TypeScript tests, 15 Rust tests, browser UI/accessibi
 The release drill uses the actual successful 0.3.0 installer artifacts, synthetic preferences and the real Tauri updater against HTTPS on loopback. It covers altered/truncated package rejection, upgrade to v1.0.0, preservation of preferences, recovery reinstall and executable removal. It does not prove power-loss recovery mid-install, a live desktop restart, login-item cleanup, native screen-reader behavior or new ChatGPT integration. The private installed connection is not touched by these tests.
 
 Local Apple Silicon updater drill passed: installed the actual 0.3.0 DMG into an isolated temporary directory, then used Tauri's updater to reject both altered and truncated packages with `Minisign(InvalidSignature)`. The intact version-bound 1.0.0 archive installed successfully and its ad-hoc bundle seal verified. This run used an ephemeral test signing key and a valid local TLS certificate chain; no production private key, saved user preferences or installed private app was accessed. Hosted production-key drills remain separately required.
+
+## v1.0.0 hosted release evidence — 5 October 2026 (Singapore)
+
+The 0.3.0 baseline is committed and pushed as `v0.3.0-preview.1` at `800409e53e24c3a96af8c850870783bbab4cfd23`. Its [three-platform validation and installer build](https://github.com/wernerong/near-dot/actions/runs/37210862464) passed. The v1.0.0 source is `0ae5575b501469c4c0607022afdf97242982ca64`; its [exact-commit validation](https://github.com/wernerong/near-dot/actions/runs/37221267140) passed on Windows x64, Apple Silicon and Intel Mac, including native packaging, unit/UI checks, audits and secret scans.
+
+The [protected release workflow](https://github.com/wernerong/near-dot/actions/runs/37223376923) uses the actual baseline installers and production-signed v1.0.0 packages. Each completed drill below observed two `Minisign(InvalidSignature)` rejections, successful Tauri installation of the intact package, unchanged synthetic preferences, manual recovery reinstall and removal of the installed executable. The Windows check compares the installed executable with the exact NSIS payload; Tauri intentionally restores an unpatched build-directory executable after packaging.
+
+| Release target | Hosted installer/update drill |
+| --- | --- |
+| Windows x64 | [Passed](https://github.com/wernerong/near-dot/actions/runs/37223376923/job/111498031359) |
+| Apple Silicon Mac | [Passed](https://github.com/wernerong/near-dot/actions/runs/37223376923/job/111498031370); ad-hoc bundle seals also verified |
+| Intel Mac | [Passed](https://github.com/wernerong/near-dot/actions/runs/37223376923/job/111498031331); ad-hoc bundle seals also verified |
+
+These results supersede the historical installer-only entries above. They do not close the physical-device, login-item cleanup, native accessibility, cold/signed-out ChatGPT, performance or power-loss-during-installation gaps. They do not establish live ChatGPT conversation sync. The unsigned OS distribution exception remains explicit; mandatory updater signature verification was not relaxed. No private installed app, personal destination, credentials, conversation or artwork was used in the hosted drills.
+
+Final artifact review passed: all 15 downloaded release assets matched the expected inventory; all 14 checksum entries matched; all six package/feed signatures verified against the committed public key; and the shipped key and third-party notices matched source. The [GitHub-hosted provenance](https://github.com/wernerong/near-dot/attestations/52627234) records matching hashes for all 15 subjects and the reviewed release workflow. Both separately signed stable/preview activation controls were verified against those same packages at 100% rollout, unpaused.
+
+[Public v1.0.0](https://github.com/wernerong/near-dot/releases/tag/v1.0.0) was published as a stable, immutable release. An unauthenticated check confirmed it is the latest release and all 15 HTTPS downloads are accessible with their expected sizes. First-time and unconfigured development installations should use the matching installer; the isolated baseline updater drill does not claim that every older preview already contains this release's public verification key.
