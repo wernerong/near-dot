@@ -42,4 +42,5 @@ minisign-verify = "=0.2.5"
 windows-registry = "=0.6.1"
 
 [dev-dependencies]
+tauri = { version = "=2.12.1", features = ["test"] }
 minisign = "=0.9.1"

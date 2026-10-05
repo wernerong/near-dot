@@ -415,7 +415,7 @@ fn launch(app: &tauri::AppHandle) -> Result<(), String> {
         "The default browser could not open the destination. Check your OS browser settings.".into()
     })
 }
-fn areas(w: &WebviewWindow) -> Vec<geometry::Rect> {
+fn areas<R: tauri::Runtime>(w: &WebviewWindow<R>) -> Vec<geometry::Rect> {
     w.available_monitors()
         .unwrap_or_default()
         .iter()
@@ -430,7 +430,12 @@ fn areas(w: &WebviewWindow) -> Vec<geometry::Rect> {
         })
         .collect()
 }
-fn recover(app: &tauri::AppHandle, reset: bool) {
+fn recover<R: tauri::Runtime>(app: &tauri::AppHandle<R>, reset: bool) {
+    // Native windows can emit DPI events while Tauri is still creating them,
+    // before setup registers AppState. Setup performs recovery once it is ready.
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
     let Some(w) = app.get_webview_window("companion") else {
         return;
     };
@@ -451,7 +456,7 @@ fn recover(app: &tauri::AppHandle, reset: bool) {
         if xy != pos || reset {
             let _ = w.set_position(PhysicalPosition::new(xy.0, xy.1));
         }
-        app.state::<AppState>().preferences.lock().unwrap().position = Some(xy);
+        state.preferences.lock().unwrap().position = Some(xy);
     }
 }
 fn persist(app: &tauri::AppHandle) -> Result<(), String> {
@@ -938,10 +943,11 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|w, e| {
-            if matches!(e, WindowEvent::Focused(_))
-                && w.label() == "companion"
-                && w.app_handle().try_state::<AppState>().is_some()
-            {
+            // Window creation may pump native events before setup runs.
+            let Some(s) = w.app_handle().try_state::<AppState>() else {
+                return;
+            };
+            if matches!(e, WindowEvent::Focused(_)) && w.label() == "companion" {
                 let _ = w.app_handle().emit_to(
                     "companion",
                     "companion-config",
@@ -950,16 +956,14 @@ pub fn run() {
             }
             if let WindowEvent::Moved(pos) = e {
                 if w.label() == "companion" {
-                    if let Some(s) = w.app_handle().try_state::<AppState>() {
-                        s.preferences.lock().unwrap().position = Some((pos.x, pos.y));
-                        *s.last_move.lock().unwrap() = std::time::Instant::now();
-                        s.position_dirty.store(true, Ordering::Relaxed);
-                        if w.app_handle()
-                            .get_webview_window("bubble")
-                            .is_some_and(|b| b.is_visible().unwrap_or(false))
-                        {
-                            place_near_companion(w.app_handle(), "bubble");
-                        }
+                    s.preferences.lock().unwrap().position = Some((pos.x, pos.y));
+                    *s.last_move.lock().unwrap() = std::time::Instant::now();
+                    s.position_dirty.store(true, Ordering::Relaxed);
+                    if w.app_handle()
+                        .get_webview_window("bubble")
+                        .is_some_and(|b| b.is_visible().unwrap_or(false))
+                    {
+                        place_near_companion(w.app_handle(), "bubble");
                     }
                 }
             }
@@ -1001,4 +1005,27 @@ pub fn run() {
                 app.state::<chat::Chat>().shutdown();
             }
         });
+}
+
+#[cfg(test)]
+mod window_startup_tests {
+    use super::*;
+
+    #[test]
+    fn recovery_before_setup_preserves_the_window_without_panicking() {
+        let app = tauri::test::mock_app();
+        let window = tauri::WebviewWindowBuilder::new(&app, "companion", Default::default())
+            .build()
+            .unwrap();
+        // A valid window already exists when an early DPI callback arrives.
+        let position = window.outer_position().unwrap();
+        assert!(window.outer_size().is_ok());
+        assert!(app.try_state::<AppState>().is_none());
+
+        recover(app.handle(), false);
+        recover(app.handle(), true);
+
+        assert_eq!(window.outer_position().unwrap(), position);
+        assert!(app.try_state::<AppState>().is_none());
+    }
 }
