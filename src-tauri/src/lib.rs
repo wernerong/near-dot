@@ -1023,7 +1023,7 @@ mod window_startup_tests {
         let mut context = tauri::test::mock_context(tauri::test::noop_assets());
         context.config_mut().app.windows =
             serde_json::from_value(config["app"]["windows"].clone()).unwrap();
-        let app = tauri::test::mock_builder()
+        let mut app = tauri::test::mock_builder()
             .setup(|app| {
                 // Tauri must reach setup before creating any configured webview,
                 // so application state can be registered before callbacks/IPC.
@@ -1034,6 +1034,7 @@ mod window_startup_tests {
             })
             .build(context)
             .unwrap();
+        app.run_iteration(|_, _| {});
         for config in &app.config().app.windows {
             tauri::WebviewWindowBuilder::from_config(&app, config)
                 .unwrap()
