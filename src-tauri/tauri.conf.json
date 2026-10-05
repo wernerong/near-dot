@@ -14,6 +14,7 @@
     "windows": [
       {
         "label": "companion",
+        "create": false,
         "title": "Near Dot companion",
         "url": "index.html?view=companion",
         "width": 156,
@@ -29,6 +30,7 @@
       },
       {
         "label": "settings",
+        "create": false,
         "title": "Near Dot \u2022 Settings",
         "width": 760,
         "height": 810,
@@ -38,6 +40,7 @@
       },
       {
         "label": "chat",
+        "create": false,
         "title": "Near Dot \u2022 Chat",
         "url": "index.html?view=chat",
         "width": 390,
@@ -51,6 +54,7 @@
       },
       {
         "label": "bubble",
+        "create": false,
         "title": "Near Dot reply",
         "url": "index.html?view=bubble",
         "width": 300,

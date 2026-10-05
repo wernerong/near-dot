@@ -828,6 +828,11 @@ pub fn run() {
                 last_move: Mutex::new(std::time::Instant::now()),
             });
             app.manage(chat::Chat::default());
+            // Webview creation pumps native events and can receive UI IPC.
+            // Register both states before any configured window is created.
+            for config in &app.config().app.windows {
+                tauri::WebviewWindowBuilder::from_config(app, config)?.build()?;
+            }
             if chat::enabled() {
                 chat_monitor(app.handle().clone());
             }
@@ -1010,6 +1015,33 @@ pub fn run() {
 #[cfg(test)]
 mod window_startup_tests {
     use super::*;
+
+    #[test]
+    fn configured_windows_are_deferred_until_setup() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+        context.config_mut().app.windows =
+            serde_json::from_value(config["app"]["windows"].clone()).unwrap();
+        let app = tauri::test::mock_builder()
+            .setup(|app| {
+                // Tauri must reach setup before creating any configured webview,
+                // so application state can be registered before callbacks/IPC.
+                for config in &app.config().app.windows {
+                    assert!(app.get_webview_window(&config.label).is_none());
+                }
+                Ok(())
+            })
+            .build(context)
+            .unwrap();
+        for config in &app.config().app.windows {
+            tauri::WebviewWindowBuilder::from_config(&app, config)
+                .unwrap()
+                .build()
+                .unwrap();
+            assert!(app.get_webview_window(&config.label).is_some());
+        }
+    }
 
     #[test]
     fn recovery_before_setup_preserves_the_window_without_panicking() {

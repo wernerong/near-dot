@@ -118,7 +118,7 @@ jobs:
       - name: Verify Windows candidate reaches UI and survives relaunch
         if: runner.os == 'Windows' && steps.changes.outputs.native == 'true'
         run: python scripts/smoke-windows-startup.py src-tauri/target/${{ matrix.target }}/release/near-dot.exe
-      - if: steps.changes.outputs.native == 'true'
+      - if: always() && steps.changes.outputs.native == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: review-${{ matrix.os }}

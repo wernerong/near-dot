@@ -30,12 +30,15 @@ def check_startup(executable, attempts=3, timeout=20):
                 ready_at = None
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
+                        output.seek(0)
+                        print(output.read().decode("utf-8", errors="replace"), file=sys.stderr)
                         raise RuntimeError(
                             f"Launch {attempt} exits before verification: {process.returncode}."
                         )
                     output.seek(0)
                     log = output.read().decode("utf-8", errors="replace")
                     if "panicked at" in log:
+                        print(log, file=sys.stderr)
                         raise RuntimeError(f"Launch {attempt} reports a panic.")
                     match = re.search(r"NEAR_DOT_STARTUP_MS=(\d+)", log)
                     if match:
