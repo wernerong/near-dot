@@ -72,6 +72,8 @@ python3 scripts/scan-public.py
 python3 scripts/run-gitleaks.py
 ```
 
+`npm run test:rust` runs Rust tests separately. On Windows it embeds the existing Common Controls v6 manifest only in the library unit-test executable, using the Windows SDK's `mt.exe`; the application binary keeps Tauri's own manifest. `npm run check` includes this step.
+
 If Node cannot find a locally trusted issuer, configure `NODE_EXTRA_CA_CERTS` with your machine's verified CA bundle. Keep certificate verification enabled. This is environment setup, not a client setting.
 
 ## Set up your link

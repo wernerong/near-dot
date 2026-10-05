@@ -65,7 +65,7 @@ jobs:
         if: runner.os == 'macOS' && steps.changes.outputs.native == 'true'
         run: python3 -m unittest discover -s experiments/dot-relay -p 'test_*.py' -v
       - if: steps.changes.outputs.native == 'true'
-        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+        run: npm run test:rust
       - if: steps.changes.outputs.native == 'true'
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings
       - if: steps.changes.outputs.native == 'true'

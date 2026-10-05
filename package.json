@@ -7,9 +7,10 @@
     "dev": "vite --host 127.0.0.1",
     "build": "npm run version:check && tsc --noEmit && vite build",
     "test": "vitest run",
+    "test:rust": "node scripts/test-rust.mjs",
     "test:ui": "playwright test",
     "tauri": "tauri",
-    "check": "npm run build && npm test && cargo test --manifest-path src-tauri/Cargo.toml --locked",
+    "check": "npm run build && npm test && npm run test:rust",
     "release:config": "node scripts/release-config.mjs",
     "version:check": "node scripts/versions.mjs",
     "version:set": "node scripts/versions.mjs --set"
