@@ -102,7 +102,19 @@ jobs:
           BUILD_TARGET: ${{ matrix.target }}
           BUILD_BUNDLES: ${{ matrix.bundles }}
         shell: bash
-        run: npm run tauri -- build --ci --target "$BUILD_TARGET" --bundles "$BUILD_BUNDLES"
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            # Keep the installed candidate's existing signed-update trust settings.
+            # Review builds contain only the public key and produce no signed artifacts.
+            export NEAR_DOT_UPDATE_REPO="$GITHUB_REPOSITORY"
+            export NEAR_DOT_UPDATER_PUBLIC_KEY="$(cat updater-public-key.txt)"
+            export NEAR_DOT_OS_SIGNING=unsigned
+            npm run release:config
+            node --input-type=module -e 'import fs from "node:fs"; const p="release-config.json"; const c=JSON.parse(fs.readFileSync(p)); c.bundle.createUpdaterArtifacts=false; fs.writeFileSync(p,JSON.stringify(c));'
+            npm run tauri -- build --ci --target "$BUILD_TARGET" --bundles "$BUILD_BUNDLES" --config release-config.json
+          else
+            npm run tauri -- build --ci --target "$BUILD_TARGET" --bundles "$BUILD_BUNDLES"
+          fi
       - name: Verify Windows candidate reaches UI and survives relaunch
         if: runner.os == 'Windows' && steps.changes.outputs.native == 'true'
         run: python scripts/smoke-windows-startup.py src-tauri/target/${{ matrix.target }}/release/near-dot.exe
