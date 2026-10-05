@@ -1034,6 +1034,8 @@ mod window_startup_tests {
             })
             .build(context)
             .unwrap();
+        // A single mock iteration triggers setup; no busy-loop is involved.
+        #[allow(deprecated)]
         app.run_iteration(|_, _| {});
         for config in &app.config().app.windows {
             tauri::WebviewWindowBuilder::from_config(&app, config)
