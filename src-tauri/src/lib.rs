@@ -306,9 +306,43 @@ async fn connect_chat(w: WebviewWindow, app: tauri::AppHandle) -> Result<(), Str
         .await
         .map_err(|_| "Reconnect could not complete.")?
 }
+#[tauri::command]
+async fn chat_setup(w: WebviewWindow, app: tauri::AppHandle, action: String) -> Result<(), String> {
+    known(&w)?;
+    if w.label() != "chat" {
+        return Err("Set up your connection from Chat.".into());
+    }
+    let url = match action.as_str() {
+        "tunnels" => Some("https://platform.openai.com/settings/organization/tunnels"),
+        "keys" => Some("https://platform.openai.com/settings/organization/api-keys"),
+        "plugins" => Some("https://chatgpt.com/plugins"),
+        "guide" => Some("https://developers.openai.com/api/docs/guides/secure-mcp-tunnels"),
+        "configure" | "disconnect" => None,
+        _ => return Err("Unknown connection setup action.".into()),
+    };
+    if let Some(url) = url {
+        return app
+            .opener()
+            .open_url(url, None::<&str>)
+            .map_err(|_| "The official setup page could not open.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let chat = app.state::<chat::Chat>();
+        if action == "configure" {
+            chat.configure(&app)
+        } else {
+            chat.disconnect(&app)
+        }
+    })
+    .await
+    .map_err(|_| "Connection setup could not complete.")?
+}
 fn chat_monitor(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         let mut initialized = false;
+        let mut last_connection_attempt = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_secs(30))
+            .unwrap();
         loop {
             if app.state::<chat::Chat>().stopped() {
                 break;
@@ -323,11 +357,14 @@ fn chat_monitor(app: tauri::AppHandle) {
                 saved.state = "disconnected".into();
                 saved.clone()
             });
-            if !initialized
+            if (cfg!(target_os = "windows")
+                && snapshot.state == "disconnected"
+                && last_connection_attempt.elapsed() >= std::time::Duration::from_secs(30)
+                || !initialized && snapshot.expires_in.is_some_and(|v| v > 0))
                 && !snapshot.transport_running
-                && snapshot.expires_in.is_some_and(|v| v > 0)
             {
-                let _ = app.state::<chat::Chat>().connect(&app);
+                last_connection_attempt = std::time::Instant::now();
+                let _ = app.state::<chat::Chat>().auto_connect(&app);
             }
             let replies: Vec<String> = snapshot
                 .messages
@@ -986,6 +1023,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             connect_chat,
+            chat_setup,
             get_chat,
             send_chat,
             retry_chat,

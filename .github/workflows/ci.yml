@@ -56,13 +56,16 @@ jobs:
           toolchain: "1.95.0"
           components: rustfmt, clippy
       - run: npm ci
+      - name: Prepare pinned Windows chat runtime
+        if: runner.os == 'Windows' && steps.changes.outputs.native == 'true'
+        run: python scripts/prepare-relay-runtime.py
       - run: npm run build
       - run: npm test
       - name: Verify isolated updater TLS fixture
         if: steps.changes.outputs.native == 'true'
         run: python scripts/create-test-tls.py
-      - name: Validate private macOS relay
-        if: runner.os == 'macOS' && steps.changes.outputs.native == 'true'
+      - name: Validate relay protocol and local credential protection
+        if: steps.changes.outputs.native == 'true'
         run: python3 -m unittest discover -s experiments/dot-relay -p 'test_*.py' -v
       - if: steps.changes.outputs.native == 'true'
         run: npm run test:rust
@@ -111,7 +114,7 @@ jobs:
             export NEAR_DOT_OS_SIGNING=unsigned
             npm run release:config
             node --input-type=module -e 'import fs from "node:fs"; const p="release-config.json"; const c=JSON.parse(fs.readFileSync(p)); c.bundle.createUpdaterArtifacts=false; fs.writeFileSync(p,JSON.stringify(c));'
-            npm run tauri -- build --ci --target "$BUILD_TARGET" --bundles "$BUILD_BUNDLES" --config release-config.json
+            npm run tauri -- build --ci --target "$BUILD_TARGET" --bundles "$BUILD_BUNDLES" --config release-config.json --config relay-runtime-config.json
           else
             npm run tauri -- build --ci --target "$BUILD_TARGET" --bundles "$BUILD_BUNDLES"
           fi

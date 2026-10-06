@@ -3,7 +3,10 @@
     "resources": {
       "../experiments/dot-relay/desktop.py": "relay/desktop.py",
       "../experiments/dot-relay/relay.py": "relay/relay.py",
-      "../experiments/dot-relay/connect.py": "relay/connect.py"
+      "../experiments/dot-relay/connect.py": "relay/connect.py",
+      "../experiments/dot-relay/privacy.py": "relay/privacy.py",
+      "../experiments/dot-relay/processes.py": "relay/processes.py",
+      "../experiments/dot-relay/setup.py": "relay/setup.py"
     }
   }
 }

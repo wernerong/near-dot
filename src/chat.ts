@@ -18,7 +18,8 @@ export async function chatUI() {
     <div id="chat-messages" class="chat-messages" role="log" aria-label="Conversation with your dot" aria-live="polite" aria-relevant="additions text"></div>
     <p id="chat-error" class="chat-error" role="alert" hidden></p>
     <form id="chat-form" class="chat-form"><label class="sr-only" for="message">Message your dot</label><textarea id="message" rows="2" maxlength="1024" placeholder="Message your dot…" aria-describedby="composer-help"></textarea><div class="composer-footer"><span id="composer-help">Enter to send · Shift + Enter for a new line</span><button id="send-message" type="submit" disabled>Send ↑</button></div></form>
-    <footer class="chat-footer"><span id="chat-expiry">Checking private connection…</span><button id="chat-reconnect" class="text-button">Reconnect</button><button id="chat-browser" class="text-button">Open ChatGPT ↗</button></footer>
+    <footer class="chat-footer"><span id="chat-expiry">Checking private connection…</span><button id="chat-setup" class="text-button">Connect my dot</button><button id="chat-reconnect" class="text-button">Reconnect</button><button id="chat-browser" class="text-button">Open ChatGPT ↗</button></footer>
+    <dialog id="connection-setup"><h2>Connect this device to your dot</h2><p>Near Dot includes the local runtime. Your Mac and Windows connections are separate. Authorize this device using your own OpenAI account.</p><ol><li><button class="text-button" id="setup-tunnels">Create a private tunnel ↗</button> in your linked OpenAI workspace.</li><li><button class="text-button" id="setup-keys">Create a runtime key ↗</button> with Tunnels Read + Use permission. Enter it only in the native prompt below.</li><li><button class="text-button" id="setup-configure">Enter my connection</button>. The native prompt asks for your tunnel ID and runtime key; both stay on this computer.</li><li><button class="text-button" id="setup-plugins">Connect your MCP plugin ↗</button> using that tunnel, enable it for your dot, and ask your dot to subscribe to near_dot.message_created with mailbox near-dot-proof. On each event, read_test_message reads the message ID and reply_to_test_message returns the answer here.</li></ol><p>Your workspace must allow custom MCP plugins and dots. Sign-in alone cannot authorize this connection. Live messaging stays enabled until you disconnect or revoke the key. This keeps exchanges sent through Near Dot; it does not import ChatGPT history.</p><p id="setup-status" role="status"></p><div class="update-buttons"><button class="text-button" id="setup-guide">Official setup guide ↗</button><button class="text-button" id="setup-disconnect">Disconnect this device</button><button id="setup-close">Done</button></div></dialog>
   </main>`;
   let current: ChatSnapshot = {
     connected: false,
@@ -52,13 +53,21 @@ export async function chatUI() {
       ? "Chat interface · Live messaging is not connected on this device."
       : "Private preview · Messages sent here stay in this relay’s history.";
     el<HTMLButtonElement>("chat-reconnect").disabled = interfaceOnly;
+    el<HTMLButtonElement>("chat-setup").hidden = interfaceOnly;
+    el("chat-reconnect").hidden = snapshot.state === "unconfigured";
+    if (snapshot.state === "awaiting-dot")
+      el("connection-state").textContent = "Waiting for your dot to connect";
+    if (snapshot.state === "paused")
+      el("connection-state").textContent = "Disconnected on this device";
     el("chat-expiry").textContent = preview
       ? "Browser preview · sending unavailable"
       : interfaceOnly
         ? "Open ChatGPT to message your dot"
         : snapshot.expiresIn
           ? `Private session · ${Math.ceil(snapshot.expiresIn / 60)} min left`
-          : "Reconnect the private relay to send";
+          : snapshot.connected
+            ? "Live connection on this device"
+            : "Connect this device to send";
     // Connection changes enable retry controls; crossing the wait threshold updates
     // status without repainting the live region on every poll.
     const next = JSON.stringify([
@@ -205,6 +214,40 @@ export async function chatUI() {
   };
   el("chat-browser").onclick = () =>
     void call("open_destination").catch((e) => error(failure(e)));
+  const setup = el<HTMLDialogElement>("connection-setup");
+  el("chat-setup").onclick = () => setup.showModal();
+  el("setup-close").onclick = () => setup.close();
+  for (const action of [
+    "tunnels",
+    "keys",
+    "configure",
+    "plugins",
+    "guide",
+    "disconnect",
+  ]) {
+    el(`setup-${action}`).onclick = async () => {
+      const button = el<HTMLButtonElement>(`setup-${action}`);
+      button.disabled = true;
+      el("setup-status").textContent =
+        action === "configure"
+          ? "Enter your connection in the native prompt…"
+          : "";
+      try {
+        await call("chat_setup", { action });
+        apply(await call<ChatSnapshot>("get_chat"));
+        if (action === "configure")
+          el("setup-status").textContent =
+            "Local connection saved. Connect the plugin and subscription in step 4.";
+        if (action === "disconnect")
+          el("setup-status").textContent =
+            "Disconnected. Saved messages remain on this device. Reconnect resumes your connection.";
+      } catch (e) {
+        el("setup-status").textContent = failure(e);
+      } finally {
+        button.disabled = false;
+      }
+    };
+  }
   bindAppearance(el("chat-avatar-button"), avatar);
 }
 

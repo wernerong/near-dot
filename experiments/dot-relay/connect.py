@@ -13,17 +13,12 @@ import sys
 import warnings
 import urllib.parse
 import urllib.request
+from privacy import private_path, private_directory, state_directory, write_new
+from processes import own_process_tree
 
 
-STATE = Path.home() / "Library/Application Support/Near Dot/transport-proof"
+STATE = state_directory()
 HERE = Path(__file__).resolve().parent
-
-
-def private_path(path):
-    if path.is_symlink() or (path.exists() and
-                            (path.stat().st_uid != os.getuid() or stat.S_IMODE(path.stat().st_mode) & 0o077)):
-        raise ValueError("Private file permissions required.")
-    return path
 
 
 def store_key():
@@ -38,11 +33,7 @@ def store_key():
         value = getpass.getpass("Runtime key (hidden): ").strip()
     if not value.startswith("sk-") or len(value) < 30 or any(c.isspace() for c in value):
         raise ValueError("The runtime key format was not recognized. Nothing was saved.")
-    descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(descriptor, "w") as stream:
-        stream.write(value)
-        stream.flush()
-        os.fsync(stream.fileno())
+    write_new(destination, value)
     value = ""
     print("Runtime key saved privately. Tell Codex: Key ready. Do not send the key.")
 
@@ -91,11 +82,8 @@ def main():
     parser.add_argument("--client", help="Path to the verified official tunnel-client executable.")
     args = parser.parse_args()
     try:
-        if os.name != "posix":
-            raise ValueError("This private credential helper is currently tested only on macOS.")
         os.umask(0o077)
-        STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
-        private_path(STATE)
+        private_directory(STATE)
         if args.command == "key":
             store_key()
             return 0
@@ -116,7 +104,9 @@ def main():
         command = [args.client, args.command,
                    "--control-plane.tunnel-id", tunnel_id,
                    "--control-plane.api-key", "file:" + str(key_path),
-                   "--mcp.command", shlex.join([sys.executable, str(HERE / "relay.py"), "--state", str(STATE), "serve"])]
+                   "--mcp.command", shlex.join([sys.executable, '-I', '-u', '-c',
+                       "import sys,runpy; from pathlib import Path; p=Path(sys.argv.pop(1)); sys.path.insert(0,str(p.parent)); runpy.run_path(str(p),run_name='__main__')",
+                       str(HERE / "relay.py"), "--state", str(STATE), "serve"])]
         if args.command == "doctor":
             command += ["--json"]
         else:
@@ -126,6 +116,7 @@ def main():
         # The vendor may include private identifiers in diagnostics. Suppress raw
         # output; use the loopback health endpoint for readiness after launch.
         print("Running the official tunnel client; raw diagnostics are suppressed.", flush=True)
+        job = own_process_tree()
         result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print(json.dumps({"operation": args.command, "exit_code": result.returncode}))
         return result.returncode

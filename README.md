@@ -28,6 +28,8 @@ Install Node **22.22.2**, Rust **1.95.0** and the [Tauri platform prerequisites]
 
 ```sh
 npm ci
+# Windows: prepare the portable runtime before dev/build/Rust tests
+python scripts/prepare-relay-runtime.py
 npm run tauri -- dev
 ```
 
@@ -68,7 +70,9 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check
 npm audit --audit-level=moderate
 cargo install cargo-audit --version 0.22.2 --locked
 cargo audit --file src-tauri/Cargo.lock
-# Private relay tests (macOS/POSIX only)
+# Prepare the pinned runtime before Windows Rust checks or packaging
+python scripts/prepare-relay-runtime.py
+# Relay protocol and OS credential protection tests
 python3 -m unittest discover -s experiments/dot-relay -p 'test_*.py' -v
 python3 scripts/scan-public.py
 python3 scripts/run-gitleaks.py
@@ -99,7 +103,11 @@ No desktop app scheme is enabled because the checked sources did not document an
 
 ## Desktop chat and private live messages
 
-The Windows installer now includes the shared Mac chat interface: conversation panel, avatar selection, close/settings controls, and access from the companion, shortcut and tray. Its interface reports that messaging is not connected and disables Send and Reconnect. Incoming reply bubbles require the private transport; no replies or history are generated in this interface. Windows does not start Python or a tunnel and does not enable the Mac private connection. Existing destination, appearance and control preferences are retained.
+Current Windows source and review installers include the shared chat interface and a portable local relay runtime. Choose **Chat → Connect my dot** for per-user setup. No system Python, terminal commands or separate tunnel download are needed. The installer includes checksum-pinned Python 3.13.12 and the official tunnel client v0.0.15 with their license notices. Rust verifies every packaged runtime file against a compiled manifest before starting it. Build with `python scripts/prepare-relay-runtime.py`, then add `--config relay-runtime-config.json` to the Tauri build command; CI and the release-draft workflow do this automatically.
+
+Each eligible user must create their own OpenAI tunnel/runtime key, connect a private MCP plugin in their linked workspace, and enable the dot's event subscription. The guided flow opens official settings and uses a native Windows credential prompt; secrets never enter the renderer. ChatGPT browser sign-in alone does not grant this access. Workspace permissions and product availability may prevent setup. This is a guided private connection, not zero-authorization consumer onboarding. No hosted service or public plugin is added.
+
+Windows stores connection files under the current user's local app-data `Near Dot/live-connection` directory, with a protected ACL allowing only that user. It preserves preferences and images independently. Consent enables renewable subscriptions without the old one-hour test cap; it does not renew revoked/expired runtime keys. The client starts again on app launch, owns its descendants, and retries a stopped connection at most once per 30 seconds. **Disconnect this device** pauses reconnecting and retains local messages; **Reconnect** resumes. “Waiting for your dot to connect” means the client is running without a usable dot subscription. Send stays disabled until both are ready. The published v1.0.0 installer predates this change; a new public release still requires review. Windows end-to-end dot messaging requires device acceptance with the user's own authorized account.
 
 The explicitly enabled private Mac development build connects the [verified MCP relay](experiments/dot-relay/README.md) to a desktop chat panel and real incoming reply bubbles on the configured test Mac. Click the companion or use the shortcut, type a message, and press Enter. Shift+Enter inserts a newline. The window retains relay history across restarts, reports disconnected/expired states, and offers Reconnect using the already authorized private setup. A failed delivery retains its local message ID for retry. Closing Chat keeps the companion available for incoming bubbles. The companion’s small reply button or tray’s Show latest reply also opens the saved reply for keyboard access.
 

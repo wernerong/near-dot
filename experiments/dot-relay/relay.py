@@ -22,6 +22,7 @@ import ssl
 import sys
 import time
 from urllib.parse import urlsplit
+from privacy import private_directory, private_path
 
 
 PROTOCOL = "2026-07-28"
@@ -115,21 +116,24 @@ def post_webhook(url, secret, subscription_id, event_id, body):
 
 class Relay:
     def __init__(self, state, post=post_webhook):
-        state = Path(state).expanduser().resolve()
+        state = Path(state).expanduser().absolute()
         if state == REPO or REPO in state.parents:
             raise RelayError("state_must_be_outside_repository")
-        # macOS-only experiment until Windows ACL protection is implemented/tested.
-        if os.name != "posix":
-            raise RelayError("private_state_permissions_untested_on_this_os")
         os.umask(0o077)
-        state.mkdir(parents=True, exist_ok=True, mode=0o700)
-        if state.stat().st_uid != os.getuid() or state.stat().st_mode & 0o077:
-            raise RelayError("state_directory_not_private")
+        try:
+            private_directory(state)
+            private_path(state / 'proof.sqlite3')
+            consent = private_path(state / 'consent.json')
+            self.persistent = False
+            if consent.exists():
+                value = json.loads(consent.read_text())
+                if value != {'schema': 1, 'persistent': True}:
+                    raise ValueError('Unknown consent schema.')
+                self.persistent = True
+        except ValueError:
+            raise RelayError('state_directory_not_private') from None
+        self.state = state
         dbpath = state / "proof.sqlite3"
-        if dbpath.is_symlink():
-            raise RelayError("state_symlink_rejected")
-        if dbpath.exists() and (dbpath.stat().st_uid != os.getuid() or dbpath.stat().st_mode & 0o077):
-            raise RelayError("state_file_not_private")
         self.db = sqlite3.connect(dbpath, timeout=10)
         self.db.row_factory = sqlite3.Row
         self.db.executescript("""
@@ -172,7 +176,7 @@ class Relay:
         window = self.db.execute("SELECT deadline FROM proof_window WHERE singleton=1").fetchone()
         return {"active_subscription": self.db.execute("SELECT 1 FROM subscription WHERE expires>?",
                                                       (time.time(),)).fetchone() is not None,
-                "proof_seconds_remaining": max(0, int(window[0] - time.time())) if window else None,
+                "proof_seconds_remaining": max(0, int(window[0] - time.time())) if window and not self.persistent else None,
                 "messages": len(rows), "acknowledged_events": sum(r[0] == 1 for r in rows),
                 "terminal_delivery_failures": sum(r[0] == 2 for r in rows),
                 "tool_replies": sum(r[1] is not None for r in rows),
@@ -180,7 +184,7 @@ class Relay:
 
     def subscribe(self, params):
         window = self.db.execute("SELECT deadline FROM proof_window WHERE singleton=1").fetchone()
-        if window and time.time() >= window[0]:
+        if not self.persistent and window and time.time() >= window[0]:
             raise RelayError("proof_window_expired")
         delivery = self.check_event_args(params)
         secret = delivery.get("secret")
@@ -209,11 +213,13 @@ class Relay:
         with self.db:
             # This is an absolute cap for this entire private proof, not a rolling
             # TTL. Automatic refreshes and unsubscribe/re-subscribe cannot extend it.
-            self.db.execute("INSERT OR IGNORE INTO proof_window VALUES(1,?)", (time.time() + 3600,))
-            deadline = self.db.execute("SELECT deadline FROM proof_window WHERE singleton=1").fetchone()[0]
-            if time.time() >= deadline:
-                raise RelayError("proof_window_expired")
-            expires = min(time.time() + ttl / 1000, deadline)
+            expires = time.time() + ttl / 1000
+            if not self.persistent:
+                self.db.execute("INSERT OR IGNORE INTO proof_window VALUES(1,?)", (time.time() + 3600,))
+                deadline = self.db.execute("SELECT deadline FROM proof_window WHERE singleton=1").fetchone()[0]
+                if time.time() >= deadline:
+                    raise RelayError("proof_window_expired")
+                expires = min(expires, deadline)
             self.db.execute("INSERT OR REPLACE INTO subscription VALUES(?,?,?,?,?,?)",
                             (sid, url, secret, previous, time.time() + 300 if previous else 0, expires))
         return {"id": sid, "refreshBefore": utc(expires), "cursor": None, "truncated": False}
@@ -264,11 +270,11 @@ class Relay:
         if name == "read_test_message" and arguments == {"message_id": "connection-check"}:
             grant = self.db.execute("SELECT deadline FROM proof_window WHERE singleton=1").fetchone()
             return {"kind": "connection_check", "relay_reachable": True,
-                    "connection_deadline": utc(grant[0]) if grant else None,
+                    "connection_deadline": utc(grant[0]) if grant and not self.persistent else None,
                     "remaining_seconds": self.status()["proof_seconds_remaining"],
-                    "owner_controlled_deadline": True, "is_message": False}
+                    "owner_controlled_deadline": not self.persistent, "is_message": False}
         window = self.db.execute("SELECT deadline FROM proof_window WHERE singleton=1").fetchone()
-        if window and time.time() >= window[0]:
+        if not self.persistent and window and time.time() >= window[0]:
             raise RelayError("proof_window_expired")
         expected = {"message_id"} if name == "read_test_message" else {"message_id", "reply"}
         if set(arguments) != expected:
@@ -317,7 +323,7 @@ class Relay:
             result = self.tool(params.get("name"), params.get("arguments", {}))
             return {"content": [{"type": "text", "text": encode(result).decode()}], "isError": False}
         if method == "events/list":
-            return {"events": [{"name": EVENT, "description": "A local Near Dot message is ready. The local owner controls a fixed connection deadline; subscription refreshes cannot extend it.",
+            return {"events": [{"name": EVENT, "description": "A local Near Dot message is ready. Subscribe to receive message IDs, then read and reply using the tools. Subscriptions require renewal before refreshBefore.",
                                 "delivery": ["webhook"],
                                 "inputSchema": {"type": "object", "properties": {"mailbox": {"type": "string", "const": MAILBOX}},
                                                 "required": ["mailbox"], "additionalProperties": False},

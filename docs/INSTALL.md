@@ -24,7 +24,7 @@ Your preferences and image stay on this device and survive upgrades. Setup is sk
 
 ## What v1.0.0 supports
 
-The published v1.0.0 installers are browser launchers. Current Windows source and review installers additionally expose the same local chat interface as the Mac private preview, with Send and Reconnect disabled and an explicit unconnected state. They do **not** provide desktop two-way chat, ChatGPT-origin reply bubbles, global task status or shared ChatGPT history. The expiring private Mac proof is excluded from public builds; it is not a consumer setup flow. See the [documented connection blocker](ROADMAP.md#live-chatgpt-conversation-sync-blocked). No separate assistant is substituted.
+The published v1.0.0 installers are browser launchers. Current Windows review installers include the chat interface and bundled local runtime. Choose **Chat → Connect my dot** to authorize your own tunnel, runtime key, MCP plugin and dot subscription in the guided flow. Enter credentials only in the native prompt. Each computer needs its own connection; do not copy another user's/Mac's key. Your linked workspace must allow custom MCP plugins and dots. The installer cannot grant these permissions from browser sign-in. Send remains disabled while setup or the dot subscription is incomplete. Disconnect pauses the connection; Reconnect resumes it. Only messages sent through this relay appear here; full ChatGPT history and global task status remain unavailable. The existing Mac proof and its fixed deadline remain separate. New Windows live messaging still requires an account-authorized end-to-end device check before a support claim.
 
 ## Update, recovery and removal
 

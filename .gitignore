@@ -15,5 +15,7 @@ release-artifacts/
 docs/local-evidence/
 local-evidence/
 __pycache__/
+src-tauri/relay-runtime/
+relay-runtime-config.json
 *.pyc
 previous/

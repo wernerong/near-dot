@@ -112,6 +112,9 @@ jobs:
           toolchain: "1.95.0"
           components: clippy, rustfmt
       - run: npm ci
+      - name: Prepare pinned Windows chat runtime
+        if: runner.os == 'Windows'
+        run: python scripts/prepare-relay-runtime.py
       # The prepare job requires successful exact-commit CI for unit/UI/audit checks.
       # This job exercises production configuration and actual installation below.
       - run: python scripts/scan-public.py
@@ -132,7 +135,7 @@ jobs:
           $env:NEAR_DOT_PFX_PATH = Join-Path $env:RUNNER_TEMP 'near-dot-signing.pfx'
           try {
             if ($publisherSigned) { [IO.File]::WriteAllBytes($env:NEAR_DOT_PFX_PATH, [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_BASE64)) }
-            npm run tauri -- build --ci --target $env:RELEASE_TARGET --bundles nsis --config release-config.json
+            npm run tauri -- build --ci --target $env:RELEASE_TARGET --bundles nsis --config release-config.json --config relay-runtime-config.json
             if ($LASTEXITCODE -ne 0) { throw 'Signed build failed.' }
             New-Item -ItemType Directory release-artifacts -Force | Out-Null
             $version = (Get-Content package.json | ConvertFrom-Json).version

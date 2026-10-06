@@ -901,3 +901,24 @@ footer .text-button {
 .appearance-status {
   min-height: 20px;
 }
+#connection-setup {
+  width: min(430px, calc(100vw - 48px));
+  max-height: 80vh;
+  overflow: auto;
+  border: 1px solid #d5ddd5;
+  border-radius: 18px;
+  padding: 20px;
+  color: #203728;
+  background: #fafcf9;
+  font-size: 13px;
+  line-height: 1.5;
+}
+#connection-setup li {
+  margin-bottom: 12px;
+}
+#connection-setup::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+.chat-footer {
+  flex-wrap: wrap;
+}

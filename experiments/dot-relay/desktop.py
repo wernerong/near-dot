@@ -5,19 +5,21 @@ import sys
 from pathlib import Path
 from relay import Relay, RelayError, MAX_TEXT
 from connect import local_health
+from privacy import state_directory, private_path
 
-STATE = Path.home() / 'Library/Application Support/Near Dot/transport-proof'
+STATE = state_directory()
 
 
 def snapshot(mailbox):
     status = mailbox.status()
     health = local_health()
     remaining = status['proof_seconds_remaining']
-    connected = bool(status['active_subscription'] and health.get('live') and
+    paused = private_path(mailbox.state / 'paused').exists()
+    connected = bool(not paused and status['active_subscription'] and health.get('live') and
                      health.get('startup_ready') and health.get('poll_failures') == 0)
     rows = mailbox.db.execute('SELECT id,body,created,delivered,reply FROM messages ORDER BY created DESC LIMIT 50').fetchall()
     return {'connected': connected, 'transportRunning': bool(health.get('live')), 'expiresIn': remaining,
-            'state': 'connected' if connected else ('expired' if remaining == 0 else 'disconnected'),
+            'state': 'paused' if paused else ('connected' if connected else ('expired' if remaining == 0 else ('awaiting-dot' if health.get('live') else 'disconnected'))),
             'messages': [{'id': r['id'], 'text': r['body'], 'created': r['created'],
                           'delivered': r['delivered'], 'reply': r['reply']} for r in reversed(rows)]}
 
@@ -40,6 +42,8 @@ def dispatch(mailbox, request):
             pass
         return snapshot(mailbox)
     if set(request) == {'operation', 'messageId'} and request['operation'] == 'retry':
+        if not snapshot(mailbox)['connected']:
+            raise RelayError('connection_unavailable')
         mid = request['messageId']
         row = mailbox.db.execute('SELECT delivered,reply FROM messages WHERE id=?', (mid,)).fetchone()
         if row is None or row['delivered'] != 0 or row['reply'] is not None:
@@ -51,7 +55,7 @@ def dispatch(mailbox, request):
 
 def main():
     # Do not create a mailbox merely because the application was opened.
-    mailbox = Relay(STATE) if (STATE / 'proof.sqlite3').exists() else None
+    mailbox = Relay(STATE) if (STATE / 'proof.sqlite3').exists() or (STATE / 'connection.json').exists() else None
     try:
         while True:
             line = sys.stdin.buffer.readline(16385)

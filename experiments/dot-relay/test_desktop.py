@@ -1,4 +1,5 @@
 """Synthetic adapter security and delivery tests, not live-dot evidence."""
+from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -9,6 +10,7 @@ from desktop import dispatch, snapshot
 class DesktopTests(unittest.TestCase):
     def test_snapshot_omits_callback_secrets_and_contains_only_mailbox_history(self):
         with tempfile.TemporaryDirectory() as state:
+            state = str(Path(state) / "synthetic-fixture")
             relay = Relay(state)
             mid = relay.queue('Explicit synthetic desktop test')
             relay.tool('reply_to_test_message', {'message_id':mid, 'reply':'Synthetic reply fixture'})
@@ -21,6 +23,7 @@ class DesktopTests(unittest.TestCase):
 
     def test_disconnected_send_and_unknown_operations_do_not_queue(self):
         with tempfile.TemporaryDirectory() as state:
+            state = str(Path(state) / "synthetic-fixture")
             relay = Relay(state)
             with patch('desktop.local_health', return_value={'live':False}):
                 for request in [{'operation':'send','text':'Explicit synthetic fixture'},
@@ -32,6 +35,7 @@ class DesktopTests(unittest.TestCase):
 
     def test_delivery_failure_preserves_queued_message_for_same_id_retry(self):
         with tempfile.TemporaryDirectory() as state:
+            state = str(Path(state) / "synthetic-fixture")
             relay = Relay(state)
             with patch('desktop.snapshot', return_value={'connected':True}), patch.object(relay,'flush',side_effect=RelayError('synthetic_failure')):
                 dispatch(relay, {'operation':'send','text':'Explicit synthetic fixture'})

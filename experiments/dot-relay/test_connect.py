@@ -16,6 +16,9 @@ class ConnectTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.state = Path(self.temp.name)
+        if os.name == "nt":
+            from privacy import protect_new_directory
+            protect_new_directory(self.state)
         self.fake = "sk-" + "synthetic-fixture-" * 3
 
     def tearDown(self):
@@ -30,7 +33,9 @@ class ConnectTests(unittest.TestCase):
                 connect.store_key()
         self.assertNotIn(self.fake, output.getvalue())
         self.assertEqual((self.state / "runtime.key").read_text(), self.fake)
-        self.assertEqual((self.state / "runtime.key").stat().st_mode & 0o777, 0o600)
+        connect.private_path(self.state / "runtime.key")
+        if os.name != "nt":
+            self.assertEqual((self.state / "runtime.key").stat().st_mode & 0o777, 0o600)
 
     def test_echo_fallback_cannot_collect_key(self):
         def unsafe_prompt(*args):
@@ -43,6 +48,7 @@ class ConnectTests(unittest.TestCase):
                 connect.store_key()
         self.assertFalse((self.state / "runtime.key").exists())
 
+    @unittest.skipIf(os.name == "nt", "POSIX mode fixture; Windows ACLs have separate tests")
     def test_symlinks_and_public_permissions_rejected(self):
         target = self.state / "target"
         target.touch(mode=0o600)

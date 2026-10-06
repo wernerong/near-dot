@@ -1,0 +1,7 @@
+{
+  "bundle": {
+    "resources": {
+      "relay-runtime/": "relay-runtime/"
+    }
+  }
+}

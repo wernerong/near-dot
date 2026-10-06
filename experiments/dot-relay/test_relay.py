@@ -12,12 +12,17 @@ import unittest
 from unittest.mock import patch
 
 import relay
+import os
+from privacy import private_path
 
 
 class RelayTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.calls = []
+        if os.name == "nt":
+            from privacy import protect_new_directory
+            protect_new_directory(Path(self.temp.name))
 
         def receiver(url, secret, sid, event_id, body):
             self.calls.append(body)
@@ -224,7 +229,9 @@ class RelayTests(unittest.TestCase):
             self.r.queue("x" * (relay.MAX_TEXT + 1))
 
     def test_private_state_and_no_repository_database(self):
-        self.assertEqual((Path(self.temp.name) / "proof.sqlite3").stat().st_mode & 0o077, 0)
+        private_path(Path(self.temp.name) / "proof.sqlite3")
+        if os.name != "nt":
+            self.assertEqual((Path(self.temp.name) / "proof.sqlite3").stat().st_mode & 0o077, 0)
         with self.assertRaises(relay.RelayError):
             relay.Relay(relay.REPO / "synthetic-test-state")
 
