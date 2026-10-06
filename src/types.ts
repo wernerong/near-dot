@@ -46,6 +46,7 @@ export interface Snapshot {
   updatesConfigured: boolean;
   setupRequired: boolean;
   chatEnabled: boolean;
+  chatTransportEnabled: boolean;
   updateStatus: UpdateStatus | null;
 }
 export interface Companion {

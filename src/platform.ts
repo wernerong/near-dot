@@ -20,6 +20,7 @@ export async function call<T = void>(
       setupRequired:
         !previewPreferences.setupCompleted && !previewPreferences.verified,
       chatEnabled: false,
+      chatTransportEnabled: false,
       updateStatus: null,
     } satisfies Snapshot as T;
   if (command === "get_companion")

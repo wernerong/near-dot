@@ -504,7 +504,7 @@ fn get_preferences(w: WebviewWindow, app: tauri::AppHandle) -> Result<serde_json
     let s = app.state::<AppState>();
     let preferences = s.preferences.lock().unwrap().clone();
     Ok(
-        serde_json::json!({"preferences":preferences,"warning":s.load_error.lock().unwrap().clone().or(s.shortcut_warning.lock().unwrap().clone()),"version":app.package_info().version.to_string(),"setupRequired":preferences.needs_setup(),"chatEnabled":chat::enabled(),"updatesConfigured":updates::configured(&app),"updateStatus":s.update_status.lock().unwrap().clone()}),
+        serde_json::json!({"preferences":preferences,"warning":s.load_error.lock().unwrap().clone().or(s.shortcut_warning.lock().unwrap().clone()),"version":app.package_info().version.to_string(),"setupRequired":preferences.needs_setup(),"chatEnabled":chat::enabled(),"chatTransportEnabled":chat::transport_enabled(),"updatesConfigured":updates::configured(&app),"updateStatus":s.update_status.lock().unwrap().clone()}),
     )
 }
 #[tauri::command]
@@ -833,7 +833,7 @@ pub fn run() {
             for config in &app.config().app.windows {
                 tauri::WebviewWindowBuilder::from_config(app, config)?.build()?;
             }
-            if chat::enabled() {
+            if chat::transport_enabled() {
                 chat_monitor(app.handle().clone());
             }
             let pet = app.get_webview_window("companion").unwrap();

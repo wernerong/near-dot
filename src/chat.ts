@@ -39,21 +39,31 @@ export async function chatUI() {
   };
   const apply = (snapshot: ChatSnapshot) => {
     current = snapshot;
+    const interfaceOnly = snapshot.state === "interface-only";
     el("connection-state").textContent = snapshot.connected
       ? "Connected to your dot"
-      : snapshot.state === "expired"
-        ? "Connection expired"
-        : "Connection unavailable";
+      : interfaceOnly
+        ? "Chat is not connected"
+        : snapshot.state === "expired"
+          ? "Connection expired"
+          : "Connection unavailable";
     el("connection-state").classList.toggle("is-connected", snapshot.connected);
+    el("chat-boundary").textContent = interfaceOnly
+      ? "Chat interface · Live messaging is not connected on this device."
+      : "Private preview · Messages sent here stay in this relay’s history.";
+    el<HTMLButtonElement>("chat-reconnect").disabled = interfaceOnly;
     el("chat-expiry").textContent = preview
       ? "Browser preview · sending unavailable"
-      : snapshot.expiresIn
-        ? `Private session · ${Math.ceil(snapshot.expiresIn / 60)} min left`
-        : "Reconnect the private relay to send";
+      : interfaceOnly
+        ? "Open ChatGPT to message your dot"
+        : snapshot.expiresIn
+          ? `Private session · ${Math.ceil(snapshot.expiresIn / 60)} min left`
+          : "Reconnect the private relay to send";
     // Connection changes enable retry controls; crossing the wait threshold updates
     // status without repainting the live region on every poll.
     const next = JSON.stringify([
       snapshot.connected,
+      snapshot.state,
       snapshot.messages,
       snapshot.messages.map(
         (item) => item.reply === null && Date.now() / 1000 - item.created > 180,
@@ -73,7 +83,9 @@ export async function chatUI() {
         const note = document.createElement("p");
         note.textContent = snapshot.connected
           ? "Send a message to the dot you already know."
-          : "Your private connection needs to be running before you can send. Saved replies remain available.";
+          : interfaceOnly
+            ? "Your chat space is ready. Use Open ChatGPT to send messages until a connection is configured on this device."
+            : "Your private connection needs to be running before you can send. Saved replies remain available.";
         empty.append(heading, note);
         list.append(empty);
       }

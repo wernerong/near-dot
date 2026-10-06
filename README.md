@@ -6,17 +6,19 @@ An independent, local desktop companion for your existing dot, with a browser la
 
 ![Settings browser preview, without personal links](docs/settings-preview.png)
 
+Current Windows source adds the shared Mac chat interface. The linked public v1.0.0 assets predate this fix; the updated installer is a review build until a new release is reviewed.
+
 ## What it does
 
 - Original transparent seed companion, gentle animation and hover feedback.
 - Custom local PNG icon or pet sprite-sheet import, preserving the original idle frame with metadata stripped and no upload or profile scraping.
-- One click or configurable global shortcut opens your tested destination in the default browser. Public installers do not expose an unavailable chat composer or run Python/tunnel helpers.
+- On Windows, click the companion or use the shortcut to open the same chat panel as the private Mac preview. Live messaging is not connected; use Open ChatGPT to send through your tested destination in the default browser. Public installers do not run Python/tunnel helpers.
 - Tray/menu bar access, hide/show, pause, size, opacity, always-on-top, position reset and settings.
 - Opt-in login startup. Keyboard access through the settings window and tray; reduced-motion support.
 - Guided first-run setup: test your destination, choose appearance and controls, review updates, then finish. Choices persist across relaunch and upgrade; existing verified installations skip the wizard.
 - Signed update adapter with progress, errors, defer/skip, stable/preview channels and staged/paused rollout.
 
-Version 1.0.0 is a launcher. The private MCP proof is behind an explicit development feature and is excluded from public installer resources. It does not export ChatGPT conversations, track global dot activity, synchronize all memory or sign in for you. A successful browser launch is **not proof that ChatGPT opened your dot**. Your device's Test link step establishes that. Keep the actual private conversation link out of source, screenshots, issues and releases; never use a public share link.
+Version 1.0.0 is a launcher with a Windows chat interface. The private MCP proof is behind an explicit development feature and is excluded from public installer resources. It does not export ChatGPT conversations, track global dot activity, synchronize all memory or sign in for you. A successful browser launch is **not proof that ChatGPT opened your dot**. Your device's Test link step establishes that. Keep the actual private conversation link out of source, screenshots, issues and releases; never use a public share link.
 
 The official integration recheck on 4 October 2026 did not establish a public dot conversation API or stable third-party deep-link contract. General API conversation state does not grant access to an existing ChatGPT dot. Desktop ChatGPT/web and a supported mobile app are the official surfaces; mobile web is unsupported. Read the [capability matrix and sources](docs/FEASIBILITY.md).
 
@@ -81,7 +83,7 @@ If Node cannot find a locally trusted issuer, configure `NODE_EXTRA_CA_CERTS` wi
 1. In a desktop browser, open your existing dot in ChatGPT, signed into the correct account/workspace. If it exposes a distinct HTTPS address, copy the browser address bar, then open that address in a fresh tab and confirm it returns to the same dot. Do not use Share or create a public link. The official guidance does not document a dedicated private-link procedure; if no address reliably reopens your dot, leave the destination unconfigured.
 2. Paste it in Settings. Near Dot displays it locally, accepts only `https://chatgpt.com` and rejects credentials, query/fragment tokens, nonstandard ports, share and API paths.
 3. Select **Test link**. Confirm the default browser opens your existing dot. If it opens a different conversation, a login screen or an unavailable page, leave it unconfirmed and fix access in ChatGPT.
-4. Tick the test confirmation, select **Continue**, choose appearance and controls, review automatic updates, then **Finish setup**. Clicking the companion or using the shortcut opens your saved dot link. Later, use the tray/menu bar’s Settings and updates to edit or test it again.
+4. Tick the test confirmation, select **Continue**, choose appearance and controls, review automatic updates, then **Finish setup**. On Windows, clicking the companion or using the shortcut opens Chat; Open ChatGPT opens your saved dot link. Other public builds open the saved link directly. Later, use the tray/menu bar’s Settings and updates to edit or test it again.
 
 A released Windows installer installs for the current user and handles WebView2 setup (an internet connection is needed if WebView2 is missing). On Mac, open the matching architecture’s DMG, drag Near Dot to Applications, eject the DMG, then launch Near Dot from Applications. No terminal, API key or new login is needed for the public launcher. Detailed [installation and first-run instructions](docs/INSTALL.md) include recovery and removal.
 
@@ -95,7 +97,9 @@ Only use art you have permission to use. Images are decoded and metadata is stri
 
 No desktop app scheme is enabled because the checked sources did not document an exact-dot launch contract. Links are per user and per device. Do not assume a desktop link works on an iPhone.
 
-## Live messages and direct conversation
+## Desktop chat and private live messages
+
+The Windows installer now includes the shared Mac chat interface: conversation panel, avatar selection, close/settings controls, and access from the companion, shortcut and tray. Its interface reports that messaging is not connected and disables Send and Reconnect. Incoming reply bubbles require the private transport; no replies or history are generated in this interface. Windows does not start Python or a tunnel and does not enable the Mac private connection. Existing destination, appearance and control preferences are retained.
 
 The explicitly enabled private Mac development build connects the [verified MCP relay](experiments/dot-relay/README.md) to a desktop chat panel and real incoming reply bubbles on the configured test Mac. Click the companion or use the shortcut, type a message, and press Enter. Shift+Enter inserts a newline. The window retains relay history across restarts, reports disconnected/expired states, and offers Reconnect using the already authorized private setup. A failed delivery retains its local message ID for retry. Closing Chat keeps the companion available for incoming bubbles. The companion’s small reply button or tray’s Show latest reply also opens the saved reply for keyboard access.
 

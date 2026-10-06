@@ -20,11 +20,11 @@ Download v1.0.0 from the [official project release](https://github.com/wernerong
 2. **Make it yours.** Choose a local PNG or import an owned pet sprite sheet, or keep the original artwork. Set size, opacity and shortcut. Always on top defaults on; start at login defaults off. A conflicting shortcut produces a readable error; choose another or leave it blank.
 3. **Updates and finish.** Automatic checks default on; Preview is selected for prerelease installations. Installation/restart requires your action unless you explicitly choose the one-time unattended option. Select Finish setup.
 
-Your preferences and image stay on this device and survive upgrades. Setup is skipped on subsequent launches. The tray/menu bar provides Settings and updates, hide/show, pause, position reset and Quit. Click the companion or use its shortcut to open the saved destination. A changed browser login, expired ChatGPT session, access change or broken link can require attention in ChatGPT or editing/testing the link again; a perpetual authenticated connection is not promised.
+Your preferences and image stay on this device and survive upgrades. Setup is skipped on subsequent launches. The tray/menu bar provides Settings and updates, hide/show, pause, position reset and Quit. In current Windows builds, click the companion or use its shortcut to open Chat, then select Open ChatGPT for the saved destination. The published v1.0.0 and other public builds open the saved destination directly. A changed browser login, expired ChatGPT session, access change or broken link can require attention in ChatGPT or editing/testing the link again; a perpetual authenticated connection is not promised.
 
 ## What v1.0.0 supports
 
-Public installers are browser launchers. They do **not** provide desktop two-way chat, ChatGPT-origin reply bubbles, global task status or shared ChatGPT history. The expiring private Mac proof is excluded from public builds; it is not a consumer setup flow. See the [documented connection blocker](ROADMAP.md#live-chatgpt-conversation-sync-blocked). No separate assistant is substituted.
+The published v1.0.0 installers are browser launchers. Current Windows source and review installers additionally expose the same local chat interface as the Mac private preview, with Send and Reconnect disabled and an explicit unconnected state. They do **not** provide desktop two-way chat, ChatGPT-origin reply bubbles, global task status or shared ChatGPT history. The expiring private Mac proof is excluded from public builds; it is not a consumer setup flow. See the [documented connection blocker](ROADMAP.md#live-chatgpt-conversation-sync-blocked). No separate assistant is substituted.
 
 ## Update, recovery and removal
 

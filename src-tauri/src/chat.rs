@@ -1,5 +1,6 @@
 //! Narrow adapter to the already approved private MCP proof. No shell, URLs or
-//! credential inputs are accepted from the renderer. macOS preview only.
+//! credential inputs are accepted from the renderer. The UI and transport have
+//! separate gates so Windows can share the Mac interface without starting a relay.
 use serde::{Deserialize, Serialize};
 use std::{
     io::{BufRead, BufReader, Read, Write},
@@ -13,10 +14,13 @@ use std::{
 use tauri::Manager;
 
 pub fn enabled() -> bool {
+    cfg!(target_os = "windows") || transport_enabled()
+}
+pub fn transport_enabled() -> bool {
     cfg!(all(feature = "private-relay", target_os = "macos"))
 }
 fn require_private() -> Result<(), String> {
-    if enabled() {
+    if transport_enabled() {
         Ok(())
     } else {
         Err("Desktop chat and ChatGPT history sync are unavailable in this public preview.".into())
@@ -46,7 +50,12 @@ impl Default for Snapshot {
         Self {
             connected: false,
             transport_running: false,
-            state: "unconfigured".into(),
+            state: if enabled() && !transport_enabled() {
+                "interface-only"
+            } else {
+                "unconfigured"
+            }
+            .into(),
             expires_in: None,
             messages: vec![],
         }
@@ -361,6 +370,20 @@ pub fn validate_message(text: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn interface_does_not_grant_transport_access() {
+        assert_eq!(enabled(), cfg!(target_os = "windows") || transport_enabled());
+        assert_eq!(require_private().is_ok(), transport_enabled());
+        if cfg!(target_os = "windows") {
+            let snapshot = Snapshot::default();
+            assert!(enabled());
+            assert!(!transport_enabled());
+            assert_eq!(snapshot.state, "interface-only");
+            assert!(!snapshot.connected);
+            assert!(!snapshot.transport_running);
+            assert!(snapshot.messages.is_empty());
+        }
+    }
     #[test]
     fn text_is_bounded_without_shell_interpretation() {
         assert!(validate_message("  ").is_err());
