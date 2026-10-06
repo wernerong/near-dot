@@ -372,7 +372,10 @@ mod tests {
     use super::*;
     #[test]
     fn interface_does_not_grant_transport_access() {
-        assert_eq!(enabled(), cfg!(target_os = "windows") || transport_enabled());
+        assert_eq!(
+            enabled(),
+            cfg!(target_os = "windows") || transport_enabled()
+        );
         assert_eq!(require_private().is_ok(), transport_enabled());
         if cfg!(target_os = "windows") {
             let snapshot = Snapshot::default();
