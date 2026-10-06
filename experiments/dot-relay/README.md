@@ -35,7 +35,7 @@ NEAR_DOT_PROOF_STATE="$HOME/Library/Application Support/Near Dot/transport-proof
 python3 experiments/dot-relay/relay.py --state "$NEAR_DOT_PROOF_STATE" status
 ```
 
-The explicit state directory is outside the repository. It is mode 0700, with a mode 0600 SQLite file. It stores only test messages/replies and the event subscription including its signing secret. This is an opt-in diagnostic mailbox, not production conversation storage. It is not encrypted at rest; use only non-sensitive test messages and remove the private proof state after disconnecting. The relay database never stores the runtime key. The connection helper stores it in a separate mode 0600 `runtime.key` file in the same private directory; only the official client reads it through a file reference. Windows is rejected until ACL protection is implemented and tested.
+The explicit state directory is outside the repository. It is mode 0700, with a mode 0600 SQLite file. It stores only test messages/replies and the event subscription including its signing secret. This is an opt-in diagnostic mailbox, not production conversation storage. It is not encrypted at rest; use only non-sensitive test messages and remove the private proof state after disconnecting. The relay database never stores the runtime key. The connection helper stores it in a separate mode 0600 `runtime.key` file in the same private directory; only the official client reads it through a file reference. The current Windows relay has a separate per-user connection directory with owner-only ACL protection. Its installer bundles the pinned Python/tunnel runtime; setup and security tests run on Windows. Actual Windows dot exchange acceptance remains separate from these synthetic tests.
 
 ## Reproduce the approved private setup
 
@@ -118,7 +118,7 @@ python3 experiments/dot-relay/relay.py --state "$NEAR_DOT_PROOF_STATE" read --me
 
 ## Private desktop preview and explicit extension
 
-The Tauri prerelease packages `desktop.py`, `relay.py` and `connect.py` as local resources. Rust starts a persistent isolated Python helper and exposes only snapshot/send/retry to the chat UI, with bounded input/output and redacted failures. It starts only the checksum-verified official tunnel client from the approved private setup. The desktop neither reads nor accepts runtime-key contents in its renderer. Public Windows setup and a distributable connection flow remain outstanding.
+The Tauri prerelease packages `desktop.py`, `relay.py` and `connect.py` as local resources. Rust starts a persistent isolated Python helper and exposes only snapshot/send/retry to the chat UI, with bounded input/output and redacted failures. It starts only the checksum-verified official tunnel client from the approved private setup. The desktop neither reads nor accepts runtime-key contents in its renderer. Windows source/review installers now provide guided per-user private setup through a native credential prompt, a bundled verified runtime, explicit disconnect and connection replacement. The Mac proof remains separate. Account authorization, dot subscription and Windows end-to-end acceptance are required; zero-authorization/public-plugin distribution remains outside this private flow.
 
 The initial one-hour cap is a proof safeguard, not an OpenAI requirement. Only after an explicit local-owner request, extend the fixed window with:
 
