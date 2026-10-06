@@ -15,10 +15,10 @@ export async function chatUI() {
   el("app").innerHTML = `<main class="chat-shell">
     <header class="chat-header"><button id="chat-avatar-button" class="avatar-button" aria-label="Choose your dot image" title="Choose your dot image"><img id="chat-avatar" src="/companion.svg" alt="Your companion image"></button><div><h1>Your dot</h1><p id="connection-state" role="status">Connecting…</p></div><button id="chat-settings" class="text-button" aria-label="Chat settings">⚙</button><button id="chat-close" class="text-button" aria-label="Close chat">×</button></header>
     <p class="chat-boundary" id="chat-boundary">Private preview · Messages sent here stay in this relay’s history.</p>
-    <div id="chat-messages" class="chat-messages" role="log" aria-label="Conversation with your dot" aria-live="polite" aria-relevant="additions text"></div>
+    <div id="chat-messages" class="chat-messages" role="log" tabindex="0" aria-label="Conversation with your dot" aria-live="polite" aria-relevant="additions text"></div>
     <p id="chat-error" class="chat-error" role="alert" hidden></p>
-    <form id="chat-form" class="chat-form"><label class="sr-only" for="message">Message your dot</label><textarea id="message" rows="2" maxlength="1024" placeholder="Message your dot…" aria-describedby="composer-help"></textarea><div class="composer-footer"><span id="composer-help">Enter to send · Shift + Enter for a new line</span><button id="send-message" type="submit" disabled>Send ↑</button></div></form>
-    <footer class="chat-footer"><span id="chat-expiry">Checking private connection…</span><button id="chat-setup" class="text-button">Connect my dot</button><button id="chat-reconnect" class="text-button">Reconnect</button><button id="chat-browser" class="text-button">Open ChatGPT ↗</button></footer>
+    <form id="chat-form" class="chat-form"><label class="sr-only" for="message">Message your dot</label><textarea id="message" rows="1" maxlength="1024" placeholder="Message your dot…" aria-describedby="composer-help"></textarea><div class="composer-footer"><span id="composer-help">Enter to send · Shift + Enter for a new line</span><button id="send-message" type="submit" disabled>Send ↑</button></div></form>
+    <details class="chat-footer" id="chat-connection-controls"><summary>Connection options</summary><p id="chat-expiry">Checking private connection…</p><div class="chat-connection-actions"><button id="chat-setup" class="text-button">Connect my dot</button><button id="chat-reconnect" class="text-button">Reconnect</button><button id="chat-browser" class="text-button">Open ChatGPT ↗</button></div></details>
     <dialog id="connection-setup" aria-labelledby="connection-title"><h2 id="connection-title">Connect this device to your dot</h2><p>Near Dot includes the local runtime. Your Mac and Windows connections are separate. Authorize this device using your own OpenAI account.</p><ol><li><button class="text-button" id="setup-tunnels">Create a private tunnel ↗</button> in your linked OpenAI workspace.</li><li><button class="text-button" id="setup-keys">Create a runtime key ↗</button> with Tunnels Read + Use permission. Enter it only in the native prompt below.</li><li><button class="text-button" id="setup-configure">Enter my connection</button>. The native prompt asks for your tunnel ID and runtime key; both stay on this computer.</li><li><button class="text-button" id="setup-plugins">Connect your MCP plugin ↗</button> using that tunnel, enable it for your dot, and ask your dot to subscribe to near_dot.message_created with mailbox near-dot-proof. On each event, read_test_message reads the message ID and reply_to_test_message returns the answer here.</li></ol><p>Your workspace must allow custom MCP plugins and dots. Sign-in alone cannot authorize this connection. Live messaging stays enabled until you disconnect or revoke the key. This keeps exchanges sent through Near Dot; it does not import ChatGPT history.</p><p id="setup-status" role="status"></p><div class="update-buttons"><button class="text-button" id="setup-guide">Official setup guide ↗</button><button class="text-button" id="setup-disconnect">Disconnect this device</button><button class="text-button" id="setup-forget">Forget connection</button><button id="setup-close">Done</button></div></dialog>
   </main>`;
   let current: ChatSnapshot = {
@@ -37,6 +37,10 @@ export async function chatUI() {
   const availability = () => {
     el<HTMLButtonElement>("send-message").disabled =
       busy || !current.connected || !message.value.trim();
+  };
+  const resizeComposer = () => {
+    message.style.height = "auto";
+    message.style.height = `${Math.min(message.scrollHeight, 80)}px`;
   };
   const apply = (snapshot: ChatSnapshot) => {
     current = snapshot;
@@ -167,7 +171,10 @@ export async function chatUI() {
     error();
     try {
       const snapshot = await call<ChatSnapshot>("send_chat", { text });
-      if (message.value === text) message.value = "";
+      if (message.value === text) {
+        message.value = "";
+        resizeComposer();
+      }
       apply(snapshot);
       el("chat-messages").scrollTop = el("chat-messages").scrollHeight;
     } catch (e) {
@@ -178,7 +185,10 @@ export async function chatUI() {
       message.focus();
     }
   });
-  message.addEventListener("input", availability);
+  message.addEventListener("input", () => {
+    resizeComposer();
+    availability();
+  });
   message.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();

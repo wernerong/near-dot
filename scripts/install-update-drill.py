@@ -67,6 +67,14 @@ with tempfile.TemporaryDirectory(prefix='neardot-release-drill-') as temp:
     seed = {'schema':1,'destination':'https://chatgpt.com/c/synthetic-drill','verified':True,'setupCompleted':True,'shortcut':'','size':180,'opacity':0.8,'alwaysOnTop':True,'paused':True,'replyPreview':False,'startup':False,'autoCheck':False,'unattendedNextLaunch':False,'channel':'stable','skippedVersion':'','position':None,'cohort':42}
     preferences.write_text(json.dumps(seed))
     before_preferences = digest(preferences)
+    stable_directory = Path.home()/'.near-dot' if windows else preferences.parent
+    if windows and stable_directory.exists():
+        raise SystemExit('Runner already has a stable settings store; refusing to overwrite.')
+    # A synthetic one-pixel PNG exercises artwork migration without user data.
+    import base64
+    avatar = preferences.with_name('avatar.png')
+    avatar.write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNwWNDwHwAE5AJg886oOwAAAABJRU5ErkJggg=='))
+    before_avatar = digest(avatar)
     mount = root/'mounted'
     def install_mac(dmg):
         run(['hdiutil','attach','-nobrowse','-readonly','-mountpoint',mount,dmg], stdout=subprocess.DEVNULL)
@@ -132,6 +140,17 @@ with tempfile.TemporaryDirectory(prefix='neardot-release-drill-') as temp:
         assert digest(preferences)==before_preferences, 'Updater changed preferences'
         if windows:
             assert digest(executable)==expected_digest, 'Installed executable differs from signed installer payload'
+            # Start the actual upgraded executable three times. Inspect the
+            # persisted app state, not merely the untouched legacy seed file.
+            import importlib.util
+            spec=importlib.util.spec_from_file_location('startup_check','scripts/smoke-windows-startup.py')
+            startup_check=importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(startup_check)
+            startup_check.check_startup(executable)
+            migrated=json.loads((stable_directory/'preferences.json').read_text())
+            assert all(migrated[key]==value for key,value in seed.items() if key!='position'), 'App did not load the migrated settings'
+            assert digest(stable_directory/'avatar.png')==before_avatar, 'App did not retain migrated artwork'
+            assert (stable_directory/'migration-complete').is_file(), 'Migration did not finish'
             # Recovery after rejected download: reinstall the newer trusted candidate.
             run([package,'/S',f'/D={installed}'])
             assert digest(executable)==expected_digest
@@ -151,7 +170,18 @@ with tempfile.TemporaryDirectory(prefix='neardot-release-drill-') as temp:
             shutil.rmtree(bundle)
             assert not bundle.exists()
         assert digest(preferences)==before_preferences, 'Recovery or uninstall deleted preferences'
+        assert digest(avatar)==before_avatar, 'Recovery or uninstall deleted legacy artwork'
+        if windows:
+            assert digest(stable_directory/'avatar.png')==before_avatar, 'Recovery or uninstall deleted migrated artwork'
+            migrated=json.loads((stable_directory/'preferences.json').read_text())
+            assert all(migrated[key]==value for key,value in seed.items() if key!='position'), 'Recovery or uninstall changed migrated settings'
         server.shutdown()
         print(f'PASS {platform}: baseline install, tampered/truncated rejection, Tauri upgrade to {version}, preferences preserved, manual recovery reinstall and executable removal.')
     finally:
         preferences.unlink(missing_ok=True)
+        avatar.unlink(missing_ok=True)
+        if windows and stable_directory.exists():
+            # Exact owned files only; never recursively remove a computed home path.
+            for name in ['preferences.json','avatar.png','migration-complete']:
+                (stable_directory/name).unlink(missing_ok=True)
+            stable_directory.rmdir()

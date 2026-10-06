@@ -76,7 +76,7 @@ test("keyboard setup, reduced motion and public screenshot", async ({
       .locator(".pet")
       .evaluate((e) => getComputedStyle(e).animationName),
   ).toBe("none");
-  await page.setViewportSize({ width: 156, height: 176 });
+  await page.setViewportSize({ width: 156, height: 156 });
   await page.screenshot({
     path: "docs/companion-preview.png",
     omitBackground: true,

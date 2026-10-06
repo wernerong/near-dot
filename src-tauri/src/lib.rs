@@ -4,6 +4,7 @@ mod destination;
 mod geometry;
 mod preferences;
 mod startup;
+mod storage;
 mod updates;
 
 use preferences::Preferences;
@@ -56,10 +57,7 @@ fn set_floating(window: &WebviewWindow, enabled: bool) -> tauri::Result<()> {
 }
 
 fn avatar_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_config_dir()
-        .map(|p| p.join("avatar.png"))
-        .map_err(|_| "Local image directory is unavailable.".into())
+    Ok(app.state::<AppState>().path.with_file_name("avatar.png"))
 }
 #[tauri::command]
 fn get_avatar(w: WebviewWindow, app: tauri::AppHandle) -> Result<avatar::View, String> {
@@ -633,7 +631,7 @@ fn save_preferences(
         }
         let _ = pet.set_size(LogicalSize::new(
             preferences.size as f64,
-            preferences.size as f64 + 20.,
+            preferences.size as f64,
         ));
     }
     if shortcut_changed {
@@ -827,9 +825,16 @@ pub fn run() {
         )
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            let path = app.path().app_config_dir()?.join("preferences.json");
+            let legacy = app.path().app_config_dir()?;
+            let directory = storage::directory(
+                &app.path().home_dir()?,
+                &legacy,
+                cfg!(target_os = "windows"),
+            );
+            let migration_error = storage::migrate(&legacy, &directory).err();
+            let path = directory.join("preferences.json");
             let (mut p, error) = match preferences::load(&path) {
-                Ok(p) => (p, None),
+                Ok(p) => (p, migration_error),
                 Err(e) => (Preferences::default(), Some(e)),
             };
             if !path.exists() {
@@ -876,7 +881,7 @@ pub fn run() {
                 chat_monitor(app.handle().clone());
             }
             let pet = app.get_webview_window("companion").unwrap();
-            pet.set_size(LogicalSize::new(p.size as f64, p.size as f64 + 20.))?;
+            pet.set_size(LogicalSize::new(p.size as f64, p.size as f64))?;
             set_floating(&pet, p.always_on_top)?;
             if let Some((x, y)) = p.position {
                 pet.set_position(PhysicalPosition::new(x, y))?;

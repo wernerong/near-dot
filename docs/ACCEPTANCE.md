@@ -1,5 +1,13 @@
 # Acceptance evidence and release gate
 
+## v1.0.2 Windows persistence and layout repair — 6 October 2026 (Singapore)
+
+The default-artwork incident is now reproduced and diagnosed: packaged-host and ordinary Windows launches read different AppData views. The configured preferences and image remained intact in one view while the ordinary launch read a separate first-run profile. An unpackaged process confirmed the split without reading credentials. Version 1.0.2 moves Windows preferences and artwork outside AppData into the user home `.near-dot` directory; migration copies the launching profile once, preserves originals and existing new-store files, and blocks saving on read/migration failure. Mac storage and private connection configuration are unchanged.
+
+Chat uses a collapsed, keyboard-accessible Connection options row and a one-line composer that grows with text. Synthetic browser checks cover real message scrolling, Enter/Shift+Enter, composer expansion/reset, accessible connection actions and no page overflow at both 390×540 and 320×400. The conversation occupies more than 53% of the client height with controls collapsed at both sizes. Companion sizes extend to 48 logical pixels, preserve existing values, and omit the desktop caption and its extra window space. The minimum-size icon remains clickable and keyboard accessible; smaller settings persist across reload.
+
+Local production build and JavaScript/browser checks precede exact-source native CI. The protected candidate workflow must verify the signed v1.0.1-to-v1.0.2 upgrade and launch the actual migrated Windows app three times before publication. Current repair acceptance does not claim a new live messaging exchange or physical screen-reader certification. The earlier v1.0.1 default-artwork entries below describe the diagnosis available at that time.
+
 ## v1.0.1 Windows review observations — 6 October 2026 (Singapore)
 
 The preceding Windows review source at `ae01564d18bf8c35c4d3cbcfb8e4cc46893bee3f` passed [three-platform validation](https://github.com/wernerong/near-dot/actions/runs/37402065497). Windows checks included 21 JavaScript, 18 Rust and 12 browser UI tests, relay protocol/credential protection tests, lint/format, dependency and secret scans, packaging and repeated native startup verification. One POSIX-only relay test was skipped on Windows.

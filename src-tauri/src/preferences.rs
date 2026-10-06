@@ -67,7 +67,7 @@ impl Preferences {
         if self.setup_completed && (!self.verified || self.destination.is_empty()) {
             return Err("Test and confirm your destination before finishing setup.".into());
         }
-        if !(120..=240).contains(&self.size)
+        if !(48..=240).contains(&self.size)
             || !self.opacity.is_finite()
             || !(0.35..=1.).contains(&self.opacity)
             || self.cohort > 99
@@ -81,10 +81,13 @@ impl Preferences {
     }
 }
 pub fn load(path: &Path) -> Result<Preferences, String> {
-    if !path.exists() {
-        return Ok(Preferences::default());
-    }
-    let raw = fs::read(path).map_err(|_| "Settings could not be read.".to_string())?;
+    let raw = match fs::read(path) {
+        Ok(raw) => raw,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Preferences::default()),
+        Err(_) => {
+            return Err("Settings could not be read; the original file has been preserved.".into())
+        }
+    };
     let fields: serde_json::Value = serde_json::from_slice(&raw)
         .map_err(|_| "Settings are invalid; the original file has been preserved.".to_string())?;
     let mut p: Preferences = serde_json::from_value(fields.clone())
@@ -113,6 +116,31 @@ pub fn save(path: &Path, p: &Preferences) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn smaller_sizes_persist_and_out_of_range_saves_preserve_the_choice() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("preferences.json");
+        for size in [48, 64, 120, 156, 240] {
+            let p = Preferences {
+                size,
+                ..Default::default()
+            };
+            save(&path, &p).unwrap();
+            assert_eq!(load(&path).unwrap().size, size);
+        }
+        let original = fs::read(&path).unwrap();
+        for size in [47, 241] {
+            assert!(save(
+                &path,
+                &Preferences {
+                    size,
+                    ..Default::default()
+                }
+            )
+            .is_err());
+            assert_eq!(fs::read(&path).unwrap(), original);
+        }
+    }
     #[test]
     fn atomic_roundtrip_and_upgrade_defaults() {
         let d = tempfile::tempdir().unwrap();

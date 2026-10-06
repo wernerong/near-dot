@@ -80,6 +80,10 @@ test("fresh setup tests a link, saves choices and stays complete after reopening
     page.getByLabel("Start at login", { exact: true }),
   ).not.toBeChecked();
   await page.getByLabel("Pause animation", { exact: true }).check();
+  const size = page.getByRole("slider", { name: /^Size/ });
+  await size.focus();
+  await size.press("Home");
+  await expect(size).toHaveValue("48");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(
     page.getByLabel("Check automatically every 6 hours"),
@@ -108,4 +112,5 @@ test("fresh setup tests a link, saves choices and stays complete after reopening
   await expect(
     page.getByLabel("Your destination", { exact: true }),
   ).toHaveValue("https://chatgpt.com/c/synthetic-setup");
+  await expect(page.getByRole("slider", { name: /^Size/ })).toHaveValue("48");
 });

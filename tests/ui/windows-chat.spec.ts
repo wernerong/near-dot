@@ -59,6 +59,21 @@ test("Windows opens the shared chat interface without enabling a transport", asy
     "aria-label",
     "Chat with my dot",
   );
+  await expect(page.locator("#open-label")).toHaveCount(0);
+  await page.setViewportSize({ width: 48, height: 48 });
+  await expect(page.locator("#pet")).toBeVisible();
+  await page.evaluate(() => sessionStorage.removeItem("synthetic-action"));
+  await page.locator("#pet").click();
+  await expect
+    .poll(() => page.evaluate(() => sessionStorage.getItem("synthetic-action")))
+    .toBe("activate");
+  await page.locator("#pet").focus();
+  await page.locator("#pet").press("Enter");
+  await expect(page.locator("#pet")).toBeFocused();
+  expect(
+    await page.evaluate(() => document.body.scrollHeight <= innerHeight),
+  ).toBe(true);
+  await page.setViewportSize({ width: 760, height: 900 });
 
   await page.goto("/?view=chat");
   await expect(
@@ -76,6 +91,7 @@ test("Windows opens the shared chat interface without enabling a transport", asy
   await expect(page.locator("#send-message")).toBeDisabled();
   await expect(page.locator("#chat-reconnect")).toBeDisabled();
   await expect(page.locator(".chat-message")).toHaveCount(0);
+  await page.getByText("Connection options", { exact: true }).click();
   await page.locator("#chat-browser").click();
   await expect
     .poll(() => page.evaluate(() => sessionStorage.getItem("synthetic-action")))

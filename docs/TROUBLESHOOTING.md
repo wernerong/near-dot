@@ -18,7 +18,7 @@
 
 ## Local data locations
 
-Windows: `%APPDATA%\org.neardot.companion\preferences.json`. Mac: `~/Library/Application Support/org.neardot.companion/preferences.json`. Tauri's OS directory resolution is authoritative if a managed system redirects these locations. Reset backup: `preferences.preserved.json` in the same directory.
+Windows v1.0.2: `%USERPROFILE%\.near-dot\preferences.json`, with `avatar.png` alongside it. Older Windows versions used `%APPDATA%\org.neardot.companion`; a packaged launching application can virtualize that directory and show a different profile from a normal Windows launch. Version 1.0.2 imports the launching profile's old files once, preserving originals and existing choices in the new store. Mac: `~/Library/Application Support/org.neardot.companion/preferences.json`. Tauri's home/config directory resolution is authoritative. Reset backup: `preferences.preserved.json` in the active settings directory. Connection keys and message history retain their separate protected location.
 
 The app's destination remains in those private local files, never in installer examples. Upgrades preserve them. Reset removes active values but preserves the previous file, so it is not a privacy wipe.
 

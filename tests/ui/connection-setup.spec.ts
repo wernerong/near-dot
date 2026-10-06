@@ -39,6 +39,7 @@ test("per-user setup uses native commands and waits for the dot subscription", a
   });
   await page.goto("/?view=chat");
   await expect(page.locator("#send-message")).toBeDisabled();
+  await page.getByText("Connection options", { exact: true }).click();
   await page
     .getByRole("button", { name: "Connect my dot", exact: true })
     .click();
