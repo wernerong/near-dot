@@ -19,6 +19,9 @@ from privacy import private_path
 class RelayTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        # macOS exposes its standard temporary root through the /var alias.
+        # Canonicalize the fixture root while still rejecting application links.
+        self.temp.name = str(Path(self.temp.name).resolve())
         self.calls = []
         if os.name == "nt":
             from privacy import protect_new_directory

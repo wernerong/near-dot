@@ -21,7 +21,7 @@ from desktop import snapshot, dispatch
 class SetupTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.state = Path(self.temp.name) / 'synthetic-fixture'
+        self.state = Path(self.temp.name).resolve() / 'synthetic-fixture'
         self.key = 'sk-' + 'synthetic-fixture-' * 3
 
     def tearDown(self):
@@ -102,7 +102,7 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         with self.assertRaises(ValueError):
             private_path(target)
-        junction = Path(self.temp.name) / 'synthetic-junction'
+        junction = Path(self.temp.name).resolve() / 'synthetic-junction'
         # This test-only Windows junction does not need symlink privileges.
         result = subprocess.run(['cmd', '/c', 'mklink', '/J', str(junction), str(self.state)], capture_output=True)
         self.assertEqual(result.returncode, 0)

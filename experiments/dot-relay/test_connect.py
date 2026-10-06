@@ -15,7 +15,7 @@ import connect
 class ConnectTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.state = Path(self.temp.name)
+        self.state = Path(self.temp.name).resolve()
         if os.name == "nt":
             from privacy import protect_new_directory
             protect_new_directory(self.state)

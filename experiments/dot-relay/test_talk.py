@@ -14,7 +14,7 @@ import talk
 class TalkTests(unittest.TestCase):
     def test_saved_reply_can_be_read_offline_without_redelivery(self):
         with tempfile.TemporaryDirectory() as state:
-            state = str(Path(state) / "synthetic-fixture")
+            state = str(Path(state).resolve() / "synthetic-fixture")
             mailbox = Relay(state)
             mid = mailbox.queue("Explicit synthetic persistence fixture")
             mailbox.tool("reply_to_test_message", {"message_id": mid, "reply": "Synthetic unit fixture reply"})
