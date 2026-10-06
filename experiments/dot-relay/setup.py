@@ -3,7 +3,17 @@ import json
 import os
 from pathlib import Path
 import sys
+import threading
 from privacy import private_directory, private_path, state_directory, write_new
+
+
+def watch_parent_input():
+    def wait_for_exit():
+        try:
+            os.read(0, 1)
+        finally:
+            os._exit(1)
+    threading.Thread(target=wait_for_exit, daemon=True).start()
 
 
 def credentials():
@@ -70,6 +80,7 @@ def main():
             if sys.argv[1:] == ['automatic-check'] and private_path(state / 'paused').exists():
                 raise ValueError('This device is disconnected. Use Reconnect to resume.')
         elif sys.argv[1:] == ['configure']:
+            watch_parent_input()
             configure(state, *credentials())
         elif sys.argv[1:] == ['pause']:
             private_directory(state)

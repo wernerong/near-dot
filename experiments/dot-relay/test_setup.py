@@ -154,3 +154,17 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(json.loads(result.stdout), {'tunnel_configured': False, 'key_file_present': False})
         self.assertEqual(result.stderr, b'')
+
+    def test_setup_helper_exits_when_parent_closes_input(self):
+        code = "import sys,time; sys.path.insert(0,sys.argv[1]); from setup import watch_parent_input; watch_parent_input(); print('ready',flush=True); time.sleep(60)"
+        helper = subprocess.Popen([sys.executable, '-I', '-u', '-c', code, str(Path(__file__).parent.resolve())], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            self.assertEqual(helper.stdout.readline().strip(), b'ready')
+            helper.stdin.close()
+            self.assertEqual(helper.wait(timeout=5), 1)
+        finally:
+            if helper.poll() is None:
+                helper.kill()
+                helper.wait()
+            helper.stdout.close()
+            helper.stderr.close()

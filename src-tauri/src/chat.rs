@@ -99,12 +99,24 @@ fn helper(app: &tauri::AppHandle, name: &str) -> Result<Command, String> {
 }
 
 fn setup_operation(app: &tauri::AppHandle, operation: &str) -> Result<(), String> {
-    let output = helper(app, "setup.py")?
+    let mut child = helper(app, "setup.py")?
         .arg(operation)
-        .stdin(Stdio::null())
+        .stdin(if operation == "configure" {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::piped())
         .stderr(Stdio::null())
-        .output()
+        .spawn()
         .map_err(|_| "The local connection setup could not start.")?;
+    // Keep the input handle open during a native prompt. If Near Dot exits,
+    // EOF tells the helper to close its prompt rather than becoming orphaned.
+    let parent_lifetime = child.stdin.take();
+    let output = child
+        .wait_with_output()
+        .map_err(|_| "The local connection setup could not complete.")?;
+    drop(parent_lifetime);
     let value: serde_json::Value = serde_json::from_slice(&output.stdout)
         .map_err(|_| "The local connection setup could not complete.")?;
     if !output.status.success() || value.get("ok") != Some(&serde_json::json!(true)) {
