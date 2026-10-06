@@ -478,6 +478,14 @@ impl Chat {
         Ok(())
     }
 
+    pub fn forget(&self, app: &tauri::AppHandle) -> Result<(), String> {
+        self.disconnect(app)?;
+        setup_operation(app, "forget")?;
+        *self.bridge.lock().unwrap() = None;
+        self.request(app, serde_json::json!({"operation":"snapshot"}))?;
+        Ok(())
+    }
+
     pub fn request(
         &self,
         app: &tauri::AppHandle,

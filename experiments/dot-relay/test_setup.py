@@ -1,5 +1,7 @@
 """Per-user setup, Windows ACL and process lifetime regression coverage."""
 import base64
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -11,6 +13,7 @@ import unittest
 from unittest.mock import patch
 from privacy import private_directory, private_path, write_new
 from setup import configure
+import setup
 from relay import Relay, EVENT, MAILBOX, encode
 from desktop import snapshot, dispatch
 
@@ -38,6 +41,28 @@ class SetupTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 configure(self.state, tunnel, key)
         self.assertFalse(self.state.exists())
+
+    def test_forget_removes_credentials_and_subscription_but_preserves_messages(self):
+        configure(self.state, 'tunnel_synthetic_fixture', self.key)
+        mailbox = Relay(self.state)
+        message = mailbox.queue('Synthetic retained message')
+        mailbox.close()
+        with patch('setup.state_directory', return_value=self.state), patch('setup.sys.argv', ['setup.py', 'forget']), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(setup.main(), 0)
+        self.assertFalse((self.state / 'runtime.key').exists())
+        self.assertFalse((self.state / 'connection.json').exists())
+        self.assertFalse((self.state / 'consent.json').exists())
+        mailbox = Relay(self.state)
+        self.assertEqual(mailbox.tool('read_test_message', {'message_id': message})['text'], 'Synthetic retained message')
+        self.assertFalse(mailbox.status()['active_subscription'])
+        mailbox.close()
+
+    def test_automatic_check_cannot_resume_paused_connection(self):
+        configure(self.state, 'tunnel_synthetic_fixture', self.key)
+        write_new(self.state / 'paused', 'paused')
+        with patch('setup.state_directory', return_value=self.state), patch('setup.sys.argv', ['setup.py', 'automatic-check']), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(setup.main(), 1)
+        self.assertTrue((self.state / 'paused').exists())
 
     def test_explicit_persistent_consent_allows_subscription_renewal_after_restart(self):
         configure(self.state, 'tunnel_synthetic_fixture', self.key)

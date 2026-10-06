@@ -46,7 +46,7 @@ def configure(state, tunnel_id, key):
     # Never silently replace an existing connection or its key/history.
     paths = [private_path(state / name) for name in ('runtime.key', 'connection.json', 'consent.json')]
     if any(path.exists() for path in paths):
-        raise ValueError('This device already has a connection. Disconnect or revoke it before replacing credentials.')
+        raise ValueError('This device already has a connection. Reconnect, or choose Forget connection before replacing credentials.')
     created = []
     try:
         for path, value in zip(paths, [key, json.dumps({'tunnel_id': tunnel_id}), json.dumps({'schema': 1, 'persistent': True})]):
@@ -80,6 +80,20 @@ def main():
             paused = private_path(state / 'paused')
             if paused.exists():
                 paused.unlink()
+        elif sys.argv[1:] == ['forget']:
+            private_directory(state)
+            from relay import Relay
+            mailbox = Relay(state)
+            try:
+                with mailbox.db:
+                    mailbox.db.execute('DELETE FROM subscription')
+                    mailbox.db.execute('DELETE FROM proof_window')
+            finally:
+                mailbox.close()
+            for name in ('runtime.key', 'connection.json', 'consent.json', 'paused', 'health.url'):
+                path = private_path(state / name)
+                if path.exists():
+                    path.unlink()
         else:
             raise ValueError('Setup operation unavailable.')
         print(json.dumps({'ok': True}), flush=True)

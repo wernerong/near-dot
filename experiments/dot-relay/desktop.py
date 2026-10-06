@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Private desktop preview adapter. Fixed operations, no credentials in responses."""
 import json
+import os
 import sys
 from pathlib import Path
 from relay import Relay, RelayError, MAX_TEXT
@@ -15,11 +16,12 @@ def snapshot(mailbox):
     health = local_health()
     remaining = status['proof_seconds_remaining']
     paused = private_path(mailbox.state / 'paused').exists()
-    connected = bool(not paused and status['active_subscription'] and health.get('live') and
+    configured = os.name != 'nt' or private_path(mailbox.state / 'connection.json').exists()
+    connected = bool(configured and not paused and status['active_subscription'] and health.get('live') and
                      health.get('startup_ready') and health.get('poll_failures') == 0)
     rows = mailbox.db.execute('SELECT id,body,created,delivered,reply FROM messages ORDER BY created DESC LIMIT 50').fetchall()
     return {'connected': connected, 'transportRunning': bool(health.get('live')), 'expiresIn': remaining,
-            'state': 'paused' if paused else ('connected' if connected else ('expired' if remaining == 0 else ('awaiting-dot' if health.get('live') else 'disconnected'))),
+            'state': 'paused' if paused else ('unconfigured' if not configured else ('connected' if connected else ('expired' if remaining == 0 else ('awaiting-dot' if health.get('live') else 'disconnected')))),
             'messages': [{'id': r['id'], 'text': r['body'], 'created': r['created'],
                           'delivered': r['delivered'], 'reply': r['reply']} for r in reversed(rows)]}
 

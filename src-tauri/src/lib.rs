@@ -317,7 +317,7 @@ async fn chat_setup(w: WebviewWindow, app: tauri::AppHandle, action: String) -> 
         "keys" => Some("https://platform.openai.com/settings/organization/api-keys"),
         "plugins" => Some("https://chatgpt.com/plugins"),
         "guide" => Some("https://developers.openai.com/api/docs/guides/secure-mcp-tunnels"),
-        "configure" | "disconnect" => None,
+        "configure" | "disconnect" | "forget" => None,
         _ => return Err("Unknown connection setup action.".into()),
     };
     if let Some(url) = url {
@@ -330,6 +330,8 @@ async fn chat_setup(w: WebviewWindow, app: tauri::AppHandle, action: String) -> 
         let chat = app.state::<chat::Chat>();
         if action == "configure" {
             chat.configure(&app)
+        } else if action == "forget" {
+            chat.forget(&app)
         } else {
             chat.disconnect(&app)
         }

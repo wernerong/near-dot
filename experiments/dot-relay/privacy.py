@@ -56,11 +56,13 @@ if os.name == 'nt':
         # Protect the empty directory before writing any private data. No broad
         # administrators/SYSTEM grants: only this user's SID can read it.
         descriptor = c.c_void_p()
-        sddl = 'D:P(A;OICI;FA;;;' + user_sid() + ')'
+        sid = user_sid()
+        inheritance = 'OICI' if path.is_dir() else ''
+        sddl = 'O:' + sid + 'D:P(A;' + inheritance + ';FA;;;' + sid + ')'
         if not adv.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, c.byref(descriptor), None):
             raise ValueError('Private storage unavailable.')
         try:
-            if not adv.SetFileSecurityW(str(path), 4 | 0x80000000, descriptor):
+            if not adv.SetFileSecurityW(str(path), 1 | 4 | 0x80000000, descriptor):
                 raise ValueError('Private storage unavailable.')
         finally:
             kernel.LocalFree(descriptor)
@@ -82,6 +84,8 @@ if os.name == 'nt':
             aces = re.findall(r'\(([^()]*)\)', sddl)
             if not sddl.startswith('O:' + sid + 'D:') or not aces:
                 raise ValueError('Private file permissions required.')
+            if path.is_dir() and 'D:P' not in sddl:
+                raise ValueError('Private directory inheritance must be disabled.')
             for ace in aces:
                 fields = ace.split(';')
                 if len(fields) != 6 or fields[0] != 'A' or fields[5] != sid:
@@ -123,6 +127,13 @@ def write_new(path, value):
     path = private_path(path)
     private_path(path.parent)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    if os.name == 'nt':
+        try:
+            protect_new_directory(path)
+        except Exception:
+            os.close(descriptor)
+            path.unlink()
+            raise
     with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
         stream.write(value)
         stream.flush()
