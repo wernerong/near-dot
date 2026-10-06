@@ -117,7 +117,8 @@ def main():
         # output; use the loopback health endpoint for readiness after launch.
         print("Running the official tunnel client; raw diagnostics are suppressed.", flush=True)
         job = own_process_tree()
-        result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         print(json.dumps({"operation": args.command, "exit_code": result.returncode}))
         return result.returncode
     except (ValueError, FileExistsError) as error:

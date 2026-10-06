@@ -53,7 +53,8 @@ export async function chatUI() {
       ? "Chat interface · Live messaging is not connected on this device."
       : "Private preview · Messages sent here stay in this relay’s history.";
     el<HTMLButtonElement>("chat-reconnect").disabled = interfaceOnly;
-    el<HTMLButtonElement>("chat-setup").hidden = interfaceOnly;
+    el<HTMLButtonElement>("chat-setup").hidden =
+      interfaceOnly || snapshot.setupSupported === false;
     el("chat-reconnect").hidden = snapshot.state === "unconfigured";
     if (snapshot.state === "awaiting-dot")
       el("connection-state").textContent = "Waiting for your dot to connect";

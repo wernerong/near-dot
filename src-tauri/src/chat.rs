@@ -148,6 +148,8 @@ pub struct Message {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
+    #[serde(default)]
+    pub setup_supported: bool,
     pub connected: bool,
     pub transport_running: bool,
     pub state: String,
@@ -157,6 +159,7 @@ pub struct Snapshot {
 impl Default for Snapshot {
     fn default() -> Self {
         Self {
+            setup_supported: cfg!(target_os = "windows"),
             connected: false,
             transport_running: false,
             state: if enabled() && !transport_enabled() {
@@ -238,8 +241,9 @@ impl Bridge {
         let value = response
             .get("ok")
             .ok_or("The private connection is unavailable. Saved messages are preserved.")?;
-        let snapshot: Snapshot =
+        let mut snapshot: Snapshot =
             serde_json::from_value(value.clone()).map_err(|_| "Invalid chat state.")?;
+        snapshot.setup_supported = cfg!(target_os = "windows");
         if snapshot.messages.len() > 50
             || snapshot.messages.iter().any(|m| {
                 m.text.chars().count() > 1024

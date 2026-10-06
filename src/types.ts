@@ -77,6 +77,7 @@ export interface ChatMessage {
   reply: string | null;
 }
 export interface ChatSnapshot {
+  setupSupported?: boolean;
   connected: boolean;
   state: string;
   expiresIn: number | null;
