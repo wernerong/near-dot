@@ -30,6 +30,10 @@ if os.name == 'nt':
     adv.OpenProcessToken.argtypes = [w.HANDLE, w.DWORD, c.POINTER(w.HANDLE)]
     adv.GetTokenInformation.argtypes = [w.HANDLE, c.c_int, c.c_void_p, w.DWORD, c.POINTER(w.DWORD)]
     adv.ConvertSidToStringSidW.argtypes = [c.c_void_p, c.POINTER(w.LPWSTR)]
+    adv.ConvertStringSidToSidW.argtypes = [w.LPCWSTR, c.POINTER(c.c_void_p)]
+    adv.EqualSid.argtypes = [c.c_void_p, c.c_void_p]
+    adv.GetAce.argtypes = [c.c_void_p, w.DWORD, c.POINTER(c.c_void_p)]
+    adv.GetSecurityDescriptorControl.argtypes = [c.c_void_p, c.POINTER(w.WORD), c.POINTER(w.DWORD)]
 
     def user_sid():
         token = w.HANDLE()
@@ -71,28 +75,38 @@ if os.name == 'nt':
         owner, acl, descriptor = c.c_void_p(), c.c_void_p(), c.c_void_p()
         if adv.GetNamedSecurityInfoW(str(path), 1, 1 | 4, c.byref(owner), None, c.byref(acl), None, c.byref(descriptor)):
             raise ValueError('Private file permissions required.')
-        value = w.LPWSTR()
+        current = c.c_void_p()
         try:
-            if not acl.value or not adv.ConvertSecurityDescriptorToStringSecurityDescriptorW(descriptor, 1, 1 | 4, c.byref(value), None):
+            if not acl.value or not adv.ConvertStringSidToSidW(user_sid(), c.byref(current)):
                 raise ValueError('Private file permissions required.')
-            import re
-            sddl = value.value
-            sid = user_sid()
+            if not adv.EqualSid(owner, current):
+                raise ValueError('Private file ownership required.')
+            control, revision = w.WORD(), w.DWORD()
+            if not adv.GetSecurityDescriptorControl(descriptor, c.byref(control), c.byref(revision)):
+                raise ValueError('Private file permissions required.')
+            if path.is_dir() and not control.value & 0x1000:
+                raise ValueError('Private directory inheritance must be disabled.')
             # Reject every ACE other than an allow for the current user. This
             # also rejects a null DACL, Everyone, inherited public access and
             # unfamiliar conditional/object ACEs rather than guessing.
-            aces = re.findall(r'\(([^()]*)\)', sddl)
-            if not sddl.startswith('O:' + sid + 'D:') or not aces:
+            class ACL(c.Structure):
+                _fields_ = [('revision', w.BYTE), ('reserved', w.BYTE), ('size', w.WORD),
+                            ('count', w.WORD), ('reserved2', w.WORD)]
+            count = c.cast(acl, c.POINTER(ACL)).contents.count
+            if not count:
                 raise ValueError('Private file permissions required.')
-            if path.is_dir() and 'D:P' not in sddl:
-                raise ValueError('Private directory inheritance must be disabled.')
-            for ace in aces:
-                fields = ace.split(';')
-                if len(fields) != 6 or fields[0] != 'A' or fields[5] != sid:
+            for index in range(count):
+                ace = c.c_void_p()
+                if not adv.GetAce(acl, index, c.byref(ace)) or c.cast(ace, c.POINTER(w.BYTE))[0] != 0:
+                    raise ValueError('Private file permissions required.')
+                # ACCESS_ALLOWED_ACE has a four-byte header, four-byte access
+                # mask, then the SID. Compare binary SIDs: SDDL may abbreviate
+                # a built-in account and cannot be used for identity equality.
+                if not adv.EqualSid(c.c_void_p(ace.value + 8), current):
                     raise ValueError('Private file permissions required.')
         finally:
-            if value:
-                kernel.LocalFree(value)
+            if current:
+                kernel.LocalFree(current)
             kernel.LocalFree(descriptor)
 
 
