@@ -34,6 +34,27 @@ if os.name == 'nt':
     adv.EqualSid.argtypes = [c.c_void_p, c.c_void_p]
     adv.GetAce.argtypes = [c.c_void_p, w.DWORD, c.POINTER(c.c_void_p)]
     adv.GetSecurityDescriptorControl.argtypes = [c.c_void_p, c.POINTER(w.WORD), c.POINTER(w.DWORD)]
+    adv.SetTokenInformation.argtypes = [w.HANDLE, c.c_int, c.c_void_p, w.DWORD]
+
+    def own_new_files():
+        # Elevated Windows tokens may default to the Administrators group as
+        # owner. Set this helper's default owner to its own user SID before
+        # SQLite or a child client creates files. Never repair existing files.
+        token, sid = w.HANDLE(), c.c_void_p()
+        if not adv.OpenProcessToken(kernel.GetCurrentProcess(), 8 | 0x80, c.byref(token)):
+            raise ValueError('Private file ownership unavailable.')
+        try:
+            if not adv.ConvertStringSidToSidW(user_sid(), c.byref(sid)):
+                raise ValueError('Private file ownership unavailable.')
+            class Owner(c.Structure):
+                _fields_ = [('sid', c.c_void_p)]
+            owner = Owner(sid)
+            if not adv.SetTokenInformation(token, 4, c.byref(owner), c.sizeof(owner)):
+                raise ValueError('Private file ownership unavailable.')
+        finally:
+            if sid:
+                kernel.LocalFree(sid)
+            kernel.CloseHandle(token)
 
     def user_sid():
         token = w.HANDLE()
@@ -130,6 +151,8 @@ def private_path(path):
 def private_directory(path):
     path = Path(path).absolute()
     reject_links(path)
+    if os.name == 'nt':
+        own_new_files()
     if not path.exists():
         path.mkdir(parents=True, mode=0o700)
         if os.name == 'nt':

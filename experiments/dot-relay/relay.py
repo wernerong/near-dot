@@ -22,7 +22,7 @@ import ssl
 import sys
 import time
 from urllib.parse import urlsplit
-from privacy import private_directory, private_path
+from privacy import private_directory, private_path, write_new
 
 
 PROTOCOL = "2026-07-28"
@@ -134,6 +134,12 @@ class Relay:
             raise RelayError('state_directory_not_private') from None
         self.state = state
         dbpath = state / "proof.sqlite3"
+        if not dbpath.exists():
+            try:
+                write_new(dbpath, '')
+            except FileExistsError:
+                # Desktop and tunnel helpers can initialize concurrently.
+                private_path(dbpath)
         self.db = sqlite3.connect(dbpath, timeout=10)
         self.db.row_factory = sqlite3.Row
         self.db.executescript("""
