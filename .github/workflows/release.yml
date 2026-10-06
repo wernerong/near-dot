@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag from reviewed main, e.g. v1.0.0"
+        description: "Release tag from reviewed main, e.g. v1.0.1"
         required: true
       baseline_tag:
         description: "Tested prior installer tag for the upgrade drill"
@@ -18,7 +18,7 @@ on:
         required: true
         default: "0"
       os_signing:
-        description: "Unsigned installers are approved for v1.0.0; updater signing is always required."
+        description: "Continue the reviewed OS distribution model; updater signing is always required."
         type: choice
         options: [unsigned, signed]
         default: unsigned

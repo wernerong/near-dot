@@ -1,6 +1,6 @@
 # Install and set up Near Dot
 
-Download v1.0.0 from the [official project release](https://github.com/wernerong/near-dot/releases/tag/v1.0.0). Choose the installer for your device. This independent project uses unsigned Windows installers and ad-hoc Mac bundles; publisher signing/notarization is not included. Tauri updater signatures are mandatory and independent of OS signing.
+Choose the reviewed installer from the [official project releases](https://github.com/wernerong/near-dot/releases). Version 1.0.1 adds the Windows startup repair and bundled live-connection runtime; v1.0.0 predates them. This independent project uses unsigned Windows installers and ad-hoc Mac bundles; publisher signing/notarization is not included. Tauri updater signatures are mandatory and independent of OS signing.
 
 ## Windows
 
@@ -22,9 +22,9 @@ Download v1.0.0 from the [official project release](https://github.com/wernerong
 
 Your preferences and image stay on this device and survive upgrades. Setup is skipped on subsequent launches. The tray/menu bar provides Settings and updates, hide/show, pause, position reset and Quit. In current Windows builds, click the companion or use its shortcut to open Chat, then select Open ChatGPT for the saved destination. The published v1.0.0 and other public builds open the saved destination directly. A changed browser login, expired ChatGPT session, access change or broken link can require attention in ChatGPT or editing/testing the link again; a perpetual authenticated connection is not promised.
 
-## What v1.0.0 supports
+## Windows live connection in v1.0.1
 
-The published v1.0.0 installers are browser launchers. Current Windows review installers include the chat interface and bundled local runtime. Choose **Chat → Connect my dot** to authorize your own tunnel, runtime key, MCP plugin and dot subscription in the guided flow. Enter credentials only in the native prompt. Each computer needs its own connection; do not copy another user's/Mac's key. Your linked workspace must allow custom MCP plugins and dots. The installer cannot grant these permissions from browser sign-in. Send remains disabled while setup or the dot subscription is incomplete. Disconnect pauses the connection; Reconnect resumes it. Only messages sent through this relay appear here; full ChatGPT history and global task status remain unavailable. The existing Mac proof and its fixed deadline remain separate. New Windows live messaging still requires an account-authorized end-to-end device check before a support claim.
+The Windows v1.0.1 installer includes the chat interface and bundled local runtime. Choose **Chat → Connect my dot** to authorize your own tunnel, runtime key, MCP plugin and dot subscription in the guided flow. Enter credentials only in the native prompt. Each computer needs its own connection; do not copy another user's/Mac's key. Your linked workspace must allow custom MCP plugins and dots. The installer cannot grant these permissions from browser sign-in. Send remains disabled while setup or the dot subscription is incomplete. Disconnect pauses the connection; Reconnect resumes it. Only messages sent through this relay appear here; full ChatGPT history and global task status remain unavailable. A real automatic Windows reply, notification and relaunch check passed on one authorized setup; other users must verify their own connection. Public Mac installers retain the launcher, and the private Mac proof and its fixed deadline remain separate.
 
 ## Update, recovery and removal
 

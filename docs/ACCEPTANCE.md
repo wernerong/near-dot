@@ -1,5 +1,15 @@
 # Acceptance evidence and release gate
 
+## v1.0.1 Windows review observations — 6 October 2026 (Singapore)
+
+The preceding Windows review source at `ae01564d18bf8c35c4d3cbcfb8e4cc46893bee3f` passed [three-platform validation](https://github.com/wernerong/near-dot/actions/runs/37402065497). Windows checks included 21 JavaScript, 18 Rust and 12 browser UI tests, relay protocol/credential protection tests, lint/format, dependency and secret scans, packaging and repeated native startup verification. One POSIX-only relay test was skipped on Windows.
+
+The installed review executable matched its artifact and all packaged runtime files matched the compiled manifest. Three actual Windows launches reached UI IPC and remained running. One owner-authorized per-user Windows connection completed a real automatic reply and notification bubble check; a separate connection left the Mac setup unchanged. Two later Windows relaunches, including the installed Start Menu shortcut, retained the imported image and reconnected without credential entry. A new synthetic message received its exact requested reply across the second restart. Saved preferences and image hashes remained unchanged.
+
+One preceding app instance displayed default artwork and first-run settings while the saved files were intact. Restart restored them, but the failing condition and cause remain unconfirmed. No specific code fix for that incident is claimed. The tested account does not establish universal eligibility, instantaneous delivery or long-duration reliability. Private destination, credential, history and artwork evidence remains ignored locally.
+
+Version 1.0.1 stamps these Windows repairs and connection features for a new release. Its exact-commit CI, protected signing/build workflow, upgrade from the v1.0.0 installer and final asset review must complete before publication. The sections below retain historical gates and results; they do not certify this new release candidate.
+
 Historical evidence below was recorded 4 October 2026. Later sections track 0.3.0 preparation and the v1.0.0 release. Older blocked/pending entries describe that earlier revision, not a certification of current installers.
 
 ## Automated validation

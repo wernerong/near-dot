@@ -2,23 +2,23 @@
 
 An independent, local desktop companion for your existing dot, with a browser launcher. An explicit development build retains the experimental private Mac chat connection. Phase 1 targets **Windows x64 and Mac**; the iPhone companion is an Apple Shortcuts recipe.
 
-**Version 1.0.0 — public launcher release, based on 0.3.0-preview.1.** [Download Windows or Mac installers](https://github.com/wernerong/near-dot/releases/tag/v1.0.0). Windows installers are not Authenticode signed; Mac bundles are ad-hoc sealed, without Developer ID/notarization, matching the owner's approved AI Usage Widget distribution model. OS warnings or blocking are possible. Automatic updates use mandatory cryptographic signatures. See [installation](docs/INSTALL.md) and [tested/untested evidence](docs/ACCEPTANCE.md).
+**Version 1.0.1 — Windows startup and desktop chat update.** [Desktop releases](https://github.com/wernerong/near-dot/releases) contain the reviewed installers; [1.0.1 notes](docs/releases/1.0.1.md) describe the candidate and its limits. Windows installers are not Authenticode signed; Mac bundles are ad-hoc sealed, without Developer ID/notarization, continuing the existing distribution model. OS warnings or blocking are possible. Automatic updates use mandatory cryptographic signatures. See [installation](docs/INSTALL.md) and [tested/untested evidence](docs/ACCEPTANCE.md).
 
 ![Settings browser preview, without personal links](docs/settings-preview.png)
 
-Current Windows source adds the shared Mac chat interface. The linked public v1.0.0 assets predate this fix; the updated installer is a review build until a new release is reviewed.
+The older public v1.0.0 assets predate the Windows startup repair, shared chat interface and bundled connection runtime. Use the reviewed v1.0.1 installer when it is published; source or review-build preparation alone does not publish a release.
 
 ## What it does
 
 - Original transparent seed companion, gentle animation and hover feedback.
 - Custom local PNG icon or pet sprite-sheet import, preserving the original idle frame with metadata stripped and no upload or profile scraping.
-- On Windows, click the companion or use the shortcut to open the same chat panel as the private Mac preview. Live messaging is not connected; use Open ChatGPT to send through your tested destination in the default browser. Public installers do not run Python/tunnel helpers.
+- On Windows, click the companion or use the shortcut to open the shared chat panel. Authorize your own private connection using **Chat → Connect my dot** to send and receive real relay messages and reply notifications. The installer includes its local runtime; account authorization and a dot subscription are still required. Open ChatGPT launches your tested destination in the default browser.
 - Tray/menu bar access, hide/show, pause, size, opacity, always-on-top, position reset and settings.
 - Opt-in login startup. Keyboard access through the settings window and tray; reduced-motion support.
 - Guided first-run setup: test your destination, choose appearance and controls, review updates, then finish. Choices persist across relaunch and upgrade; existing verified installations skip the wizard.
 - Signed update adapter with progress, errors, defer/skip, stable/preview channels and staged/paused rollout.
 
-Version 1.0.0 is a launcher with a Windows chat interface. The private MCP proof is behind an explicit development feature and is excluded from public installer resources. It does not export ChatGPT conversations, track global dot activity, synchronize all memory or sign in for you. A successful browser launch is **not proof that ChatGPT opened your dot**. Your device's Test link step establishes that. Keep the actual private conversation link out of source, screenshots, issues and releases; never use a public share link.
+Version 1.0.1 includes per-user Windows live relay setup. Public Mac packages retain the launcher; their private MCP chat preview requires an explicit development feature. Neither route exports ChatGPT conversations, tracks global dot activity, synchronizes all memory or signs in for you. A successful browser launch is **not proof that ChatGPT opened your dot**. Your device's Test link step establishes that. Keep the actual private conversation link out of source, screenshots, issues and releases; never use a public share link.
 
 The official integration recheck on 4 October 2026 did not establish a public dot conversation API or stable third-party deep-link contract. General API conversation state does not grant access to an existing ChatGPT dot. Desktop ChatGPT/web and a supported mobile app are the official surfaces; mobile web is unsupported. Read the [capability matrix and sources](docs/FEASIBILITY.md).
 
@@ -121,7 +121,7 @@ npm run tauri -- dev --features private-relay --config src-tauri/tauri.private.c
 npm run tauri -- build --features private-relay --config src-tauri/tauri.private.conf.json --bundles app
 ```
 
-The requested seamless live ChatGPT chat, incoming ChatGPT-origin replies and shared history remain a blocker. Installer preparation does not complete that goal. See [documented integration findings](docs/ROADMAP.md#live-chatgpt-conversation-sync-blocked).
+The private Windows relay has completed a real automatic reply and notification test on one authorized setup. Seamless onboarding for every account and full ChatGPT conversation/shared-history synchronization remain unavailable. See [documented integration findings](docs/ROADMAP.md#live-chatgpt-conversation-sync-blocked) and the current release's limits.
 
 ## Updates and release readiness
 
