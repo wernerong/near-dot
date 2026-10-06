@@ -14,7 +14,7 @@ import warnings
 import urllib.parse
 import urllib.request
 from privacy import private_path, private_directory, state_directory, write_new
-from processes import own_process_tree
+from processes import own_process_tree, watch_parent_input
 
 
 STATE = state_directory()
@@ -80,6 +80,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("key", "status", "health", "doctor", "run"))
     parser.add_argument("--client", help="Path to the verified official tunnel-client executable.")
+    parser.add_argument("--parent-lifetime", action="store_true", help="Stop when the desktop parent closes its input pipe.")
     args = parser.parse_args()
     try:
         os.umask(0o077)
@@ -117,6 +118,8 @@ def main():
         # output; use the loopback health endpoint for readiness after launch.
         print("Running the official tunnel client; raw diagnostics are suppressed.", flush=True)
         job = own_process_tree()
+        if args.parent_lifetime:
+            watch_parent_input()
         result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         print(json.dumps({"operation": args.command, "exit_code": result.returncode}))

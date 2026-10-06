@@ -3,17 +3,8 @@ import json
 import os
 from pathlib import Path
 import sys
-import threading
 from privacy import private_directory, private_path, state_directory, write_new
-
-
-def watch_parent_input():
-    def wait_for_exit():
-        try:
-            os.read(0, 1)
-        finally:
-            os._exit(1)
-    threading.Thread(target=wait_for_exit, daemon=True).start()
+from processes import watch_parent_input
 
 
 def credentials():

@@ -308,9 +308,9 @@ impl Chat {
                 setup_operation(app, "resume")?;
             }
             let mut started = helper(app, "connect.py")?
-                .args(["run", "--client"])
+                .args(["run", "--parent-lifetime", "--client"])
                 .arg(runtime(app)?.join("tunnel/tunnel-client.exe"))
-                .stdin(Stdio::null())
+                .stdin(Stdio::piped())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .spawn()

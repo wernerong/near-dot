@@ -1,5 +1,15 @@
 """Keep Windows transport descendants inside their parent's lifetime."""
 import os
+import threading
+
+
+def watch_parent_input():
+    def wait_for_exit():
+        try:
+            os.read(0, 1)
+        finally:
+            os._exit(1)
+    threading.Thread(target=wait_for_exit, daemon=True).start()
 
 
 def own_process_tree():

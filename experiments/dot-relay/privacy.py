@@ -6,7 +6,9 @@ import stat
 
 def state_directory():
     if os.name == 'nt':
-        return Path(os.environ['LOCALAPPDATA']) / 'Near Dot/live-connection'
+        # Keep user data outside the NSIS installation directory so removing
+        # or upgrading application files cannot remove credentials/history.
+        return Path(os.environ['LOCALAPPDATA']) / 'org.neardot.companion/live-connection'
     return Path.home() / 'Library/Application Support/Near Dot/transport-proof'
 
 
