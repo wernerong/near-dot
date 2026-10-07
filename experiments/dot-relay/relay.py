@@ -30,6 +30,8 @@ EVENT = "near_dot.message_created"
 MAILBOX = "near-dot-proof"
 MAX_TEXT = 1024
 MAX_BODY = 262144
+REPLY_RETRY_SECONDS = 180
+PENDING_LIMIT = 10
 REPO = Path(__file__).resolve().parents[2]
 
 
@@ -153,6 +155,13 @@ class Relay:
           CREATE TABLE IF NOT EXISTS proof_window (
             singleton INTEGER PRIMARY KEY CHECK(singleton=1), deadline REAL NOT NULL);
         """)
+        # Serialize migration across the desktop and tunnel helper processes.
+        # Existing mailbox rows and replies remain intact after an upgrade.
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            columns = {row[1] for row in self.db.execute("PRAGMA table_info(messages)")}
+            if "last_attempt" not in columns:
+                self.db.execute("ALTER TABLE messages ADD COLUMN last_attempt REAL NOT NULL DEFAULT 0")
         self.post = post
 
     def close(self):
@@ -247,10 +256,15 @@ class Relay:
         if subscription["rotate_until"] > time.time():
             raise RelayError("secret_rotation_delivery_paused")
         if message_id is None:
-            pending = self.db.execute("SELECT * FROM messages WHERE delivered=0 ORDER BY created").fetchall()
+            pending = self.db.execute("SELECT * FROM messages WHERE delivered=0 AND reply IS NULL ORDER BY created").fetchall()
         else:
-            pending = self.db.execute("SELECT * FROM messages WHERE id=? AND delivered=0", (message_id,)).fetchall()
+            pending = self.db.execute("SELECT * FROM messages WHERE id=? AND delivered=0 AND reply IS NULL", (message_id,)).fetchall()
         for message in pending:
+            with self.db:
+                updated = self.db.execute("UPDATE messages SET last_attempt=? WHERE id=? AND reply IS NULL AND delivered=0",
+                                          (time.time(), message["id"]))
+            if not updated.rowcount:
+                continue
             event = {"eventId": message["event_id"], "name": EVENT,
                      "timestamp": utc(message["created"]),
                      "data": {"mailbox": MAILBOX, "message_id": message["id"]}, "cursor": None}
@@ -270,6 +284,25 @@ class Relay:
                 self.db.execute("UPDATE messages SET delivered=1 WHERE id=?", (message["id"],))
         return self.status()
 
+    def retry(self, message_id):
+        # Only a local, explicit request can remind the dot after an acknowledged
+        # event. Transport retries retain the event ID; a new reminder has a new
+        # event ID so host deduplication does not discard it. Both use the original
+        # message ID and the same idempotent reply slot.
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            message = self.db.execute("SELECT * FROM messages WHERE id=?", (message_id,)).fetchone()
+            if not message or message["delivered"] == 2:
+                raise RelayError("message_not_retryable")
+            if message["reply"] is not None:
+                return self.status()
+            if message["delivered"] == 1:
+                if time.time() - max(message["created"], message["last_attempt"]) < REPLY_RETRY_SECONDS:
+                    raise RelayError("reply_retry_too_soon")
+                self.db.execute("UPDATE messages SET delivered=0,event_id=?,last_attempt=? WHERE id=?",
+                                ("evt_" + secrets.token_hex(16), time.time(), message_id))
+        return self.flush(message_id)
+
     def tool(self, name, arguments):
         if name not in ("read_test_message", "reply_to_test_message"):
             raise RelayError("unknown_tool")
@@ -282,6 +315,15 @@ class Relay:
         window = self.db.execute("SELECT deadline FROM proof_window WHERE singleton=1").fetchone()
         if not self.persistent and window and time.time() >= window[0]:
             raise RelayError("proof_window_expired")
+        if name == "read_test_message" and arguments in ({}, {"message_id": "pending"}):
+            # Event-triggered runs may lack event data. Recover only messages the
+            # owner has already submitted, never unsent drafts or answered history.
+            rows = self.db.execute("""SELECT id,body FROM messages
+                WHERE reply IS NULL AND delivered != 2 AND (delivered=1 OR last_attempt>0)
+                ORDER BY created,id LIMIT ?""", (PENDING_LIMIT + 1,)).fetchall()
+            return {"messages": [{"message_id": row["id"], "text": row["body"]}
+                                 for row in rows[:PENDING_LIMIT]],
+                    "has_more": len(rows) > PENDING_LIMIT}
         expected = {"message_id"} if name == "read_test_message" else {"message_id", "reply"}
         if set(arguments) != expected:
             raise RelayError("invalid_tool_arguments")
@@ -314,14 +356,15 @@ class Relay:
             tools = []
             for name in ("read_test_message", "reply_to_test_message"):
                 read = name == "read_test_message"
-                properties = {"message_id": {"type": "string"}}
+                properties = {"message_id": {"type": "string", "description":
+                              "The message_id inside event data. Use pending to recover unanswered submitted messages if event data is missing." if read else "The message_id returned by read_test_message."}}
                 if not read:
                     properties["reply"] = {"type": "string", "minLength": 1, "maxLength": MAX_TEXT}
                 tools.append({"name": name,
-                              "description": ("Read one locally queued Near Dot test message by its event ID. For a harmless access check, use message_id connection-check; this returns relay readiness, not a message."
-                                              if read else "Return your response to one Near Dot test message to the user's local CLI. Only include the non-sensitive test answer; never unrelated chat history, credentials or private account data."),
+                              "description": ("Read a Near Dot message using data.message_id from its event, not eventId. If the event has no message ID, omit message_id or use pending to retrieve up to 10 unanswered submitted messages. Reply using each returned message_id; repeat while has_more is true. This does not return unsent drafts or ChatGPT history. For a harmless readiness check, use connection-check."
+                                              if read else "Return your response to one Near Dot message to the user's local chat. Use its message_id from read_test_message. Repeated identical replies are safe; an existing reply cannot be replaced. Never include unrelated chat history, credentials or private account data."),
                               "inputSchema": {"type": "object", "properties": properties,
-                                              "required": list(properties), "additionalProperties": False},
+                                              "required": [] if read else list(properties), "additionalProperties": False},
                               "annotations": {"readOnlyHint": read, "destructiveHint": False,
                                               "idempotentHint": True, "openWorldHint": False}})
             return {"tools": tools}

@@ -19,7 +19,7 @@ export async function chatUI() {
     <p id="chat-error" class="chat-error" role="alert" hidden></p>
     <form id="chat-form" class="chat-form"><label class="sr-only" for="message">Message your dot</label><textarea id="message" rows="1" maxlength="1024" placeholder="Message your dot…" aria-describedby="composer-help"></textarea><div class="composer-footer"><span id="composer-help">Enter to send · Shift + Enter for a new line</span><button id="send-message" type="submit" disabled>Send ↑</button></div></form>
     <details class="chat-footer" id="chat-connection-controls"><summary>Connection options</summary><p id="chat-expiry">Checking private connection…</p><div class="chat-connection-actions"><button id="chat-setup" class="text-button">Connect my dot</button><button id="chat-reconnect" class="text-button">Reconnect</button><button id="chat-browser" class="text-button">Open ChatGPT ↗</button></div></details>
-    <dialog id="connection-setup" aria-labelledby="connection-title"><h2 id="connection-title">Connect this device to your dot</h2><p>Near Dot includes the local runtime. Your Mac and Windows connections are separate. Authorize this device using your own OpenAI account.</p><ol><li><button class="text-button" id="setup-tunnels">Create a private tunnel ↗</button> in your linked OpenAI workspace.</li><li><button class="text-button" id="setup-keys">Create a runtime key ↗</button> with Tunnels Read + Use permission. Enter it only in the native prompt below.</li><li><button class="text-button" id="setup-configure">Enter my connection</button>. The native prompt asks for your tunnel ID and runtime key; both stay on this computer.</li><li><button class="text-button" id="setup-plugins">Connect your MCP plugin ↗</button> using that tunnel, enable it for your dot, and ask your dot to subscribe to near_dot.message_created with mailbox near-dot-proof. On each event, read_test_message reads the message ID and reply_to_test_message returns the answer here.</li></ol><p>Your workspace must allow custom MCP plugins and dots. Sign-in alone cannot authorize this connection. Live messaging stays enabled until you disconnect or revoke the key. This keeps exchanges sent through Near Dot; it does not import ChatGPT history.</p><p id="setup-status" role="status"></p><div class="update-buttons"><button class="text-button" id="setup-guide">Official setup guide ↗</button><button class="text-button" id="setup-disconnect">Disconnect this device</button><button class="text-button" id="setup-forget">Forget connection</button><button id="setup-close">Done</button></div></dialog>
+    <dialog id="connection-setup" aria-labelledby="connection-title"><h2 id="connection-title">Connect this device to your dot</h2><p>Near Dot includes the local runtime. Your Mac and Windows connections are separate. Authorize this device using your own OpenAI account.</p><ol><li><button class="text-button" id="setup-tunnels">Create a private tunnel ↗</button> in your linked OpenAI workspace.</li><li><button class="text-button" id="setup-keys">Create a runtime key ↗</button> with Tunnels Read + Use permission. Enter it only in the native prompt below.</li><li><button class="text-button" id="setup-configure">Enter my connection</button>. The native prompt asks for your tunnel ID and runtime key; both stay on this computer.</li><li><button class="text-button" id="setup-plugins">Connect your MCP plugin ↗</button> using that tunnel, enable it for your dot, and ask your dot to subscribe to near_dot.message_created with mailbox near-dot-proof. On each event, use read_test_message with data.message_id, then reply_to_test_message with that same ID. If event data is missing, read_test_message with message_id pending recovers unanswered messages. After upgrading an existing plugin, rescan its tools and add this fallback to your dot subscription instructions.</li></ol><p>Your workspace must allow custom MCP plugins and dots. Sign-in alone cannot authorize this connection. Live messaging stays enabled until you disconnect or revoke the key. This keeps exchanges sent through Near Dot; it does not import ChatGPT history.</p><p id="setup-status" role="status"></p><div class="update-buttons"><button class="text-button" id="setup-guide">Official setup guide ↗</button><button class="text-button" id="setup-disconnect">Disconnect this device</button><button class="text-button" id="setup-forget">Forget connection</button><button id="setup-close">Done</button></div></dialog>
   </main>`;
   let current: ChatSnapshot = {
     connected: false,
@@ -46,7 +46,7 @@ export async function chatUI() {
     current = snapshot;
     const interfaceOnly = snapshot.state === "interface-only";
     el("connection-state").textContent = snapshot.connected
-      ? "Connected to your dot"
+      ? "Relay connected"
       : interfaceOnly
         ? "Chat is not connected"
         : snapshot.state === "expired"
@@ -80,7 +80,10 @@ export async function chatUI() {
       snapshot.state,
       snapshot.messages,
       snapshot.messages.map(
-        (item) => item.reply === null && Date.now() / 1000 - item.created > 180,
+        (item) =>
+          item.reply === null &&
+          Date.now() / 1000 - Math.max(item.created, item.lastAttempt ?? 0) >=
+            180,
       ),
     ]);
     if (next !== signature) {
@@ -116,6 +119,9 @@ export async function chatUI() {
           incoming.setAttribute("aria-label", `Your dot: ${item.reply}`);
           list.append(incoming);
         } else {
+          const waitingTooLong =
+            Date.now() / 1000 - Math.max(item.created, item.lastAttempt ?? 0) >=
+            180;
           const status = document.createElement("div");
           status.className = "message-delivery";
           status.textContent =
@@ -123,14 +129,18 @@ export async function chatUI() {
               ? "Delivery rejected."
               : item.delivered === 0
                 ? "Saved locally · not delivered"
-                : Date.now() / 1000 - item.created > 180
-                  ? "Taking longer than usual. Still waiting for a reply."
-                  : "Waiting for your dot’s reply…";
-          if (item.delivered === 0) {
+                : waitingTooLong
+                  ? "ChatGPT accepted delivery, but no reply arrived. You can request it again."
+                  : "Delivered to ChatGPT · waiting for a reply…";
+          if (
+            item.delivered === 0 ||
+            (item.delivered === 1 && waitingTooLong)
+          ) {
             const retry = document.createElement("button");
             retry.type = "button";
             retry.className = "text-button";
-            retry.textContent = "Retry delivery";
+            retry.textContent =
+              item.delivered === 0 ? "Retry delivery" : "Request reply again";
             retry.disabled = !snapshot.connected;
             retry.onclick = async () => {
               retry.disabled = true;

@@ -46,7 +46,7 @@ for (const viewport of [
     });
     await page.goto("/?view=chat");
     await expect(page.locator("#connection-state")).toHaveText(
-      "Connected to your dot",
+      "Relay connected",
     );
     const messages = page.locator("#chat-messages");
     await expect(page.locator(".chat-message")).toHaveCount(2);

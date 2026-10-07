@@ -84,6 +84,8 @@ If Node cannot find a locally trusted issuer, configure `NODE_EXTRA_CA_CERTS` wi
 
 ## Set up your link
 
+For a stalled live message in v1.0.3, **Request reply again** becomes available after three minutes and reuses the saved message. After upgrading an existing private MCP plugin, rescan its tools and tell your dot to call `read_test_message` with `message_id: pending` whenever an event arrives without message data. This returns only unanswered messages already submitted through this relay. See the [recovery instructions](docs/releases/1.0.3.md#existing-live-connections).
+
 1. In a desktop browser, open your existing dot in ChatGPT, signed into the correct account/workspace. If it exposes a distinct HTTPS address, copy the browser address bar, then open that address in a fresh tab and confirm it returns to the same dot. Do not use Share or create a public link. The official guidance does not document a dedicated private-link procedure; if no address reliably reopens your dot, leave the destination unconfigured.
 2. Paste it in Settings. Near Dot displays it locally, accepts only `https://chatgpt.com` and rejects credentials, query/fragment tokens, nonstandard ports, share and API paths.
 3. Select **Test link**. Confirm the default browser opens your existing dot. If it opens a different conversation, a login screen or an unavailable page, leave it unconfirmed and fix access in ChatGPT.

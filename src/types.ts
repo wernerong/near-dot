@@ -73,6 +73,7 @@ export interface ChatMessage {
   id: string;
   text: string;
   created: number;
+  lastAttempt?: number;
   delivered: number;
   reply: string | null;
 }

@@ -19,11 +19,12 @@ def snapshot(mailbox):
     configured = os.name != 'nt' or private_path(mailbox.state / 'connection.json').exists()
     connected = bool(configured and not paused and status['active_subscription'] and health.get('live') and
                      health.get('startup_ready') and health.get('poll_failures') == 0)
-    rows = mailbox.db.execute('SELECT id,body,created,delivered,reply FROM messages ORDER BY created DESC LIMIT 50').fetchall()
+    rows = mailbox.db.execute('SELECT id,body,created,delivered,reply,last_attempt FROM messages ORDER BY created DESC LIMIT 50').fetchall()
     return {'connected': connected, 'transportRunning': bool(health.get('live')), 'expiresIn': remaining,
             'state': 'paused' if paused else ('unconfigured' if not configured else ('connected' if connected else ('expired' if remaining == 0 else ('awaiting-dot' if health.get('live') else 'disconnected')))),
             'messages': [{'id': r['id'], 'text': r['body'], 'created': r['created'],
-                          'delivered': r['delivered'], 'reply': r['reply']} for r in reversed(rows)]}
+                          'delivered': r['delivered'], 'reply': r['reply'],
+                          'lastAttempt': r['last_attempt']} for r in reversed(rows)]}
 
 
 def dispatch(mailbox, request):
@@ -47,10 +48,7 @@ def dispatch(mailbox, request):
         if not snapshot(mailbox)['connected']:
             raise RelayError('connection_unavailable')
         mid = request['messageId']
-        row = mailbox.db.execute('SELECT delivered,reply FROM messages WHERE id=?', (mid,)).fetchone()
-        if row is None or row['delivered'] != 0 or row['reply'] is not None:
-            raise RelayError('message_not_retryable')
-        mailbox.flush(mid)
+        mailbox.retry(mid)
         return snapshot(mailbox)
     raise RelayError('operation_not_allowed')
 

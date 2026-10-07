@@ -1,5 +1,13 @@
 # Acceptance evidence and release gate
 
+## v1.0.3 stalled relay reply recovery — 7 October 2026 (Singapore)
+
+Read-only diagnosis on the incident PC confirmed the installed v1.0.2 files matched source, the tunnel was live and ready with no polling failures, and the saved subscription remained active after restart. The local mailbox retained eight answered exchanges and one acknowledged unanswered message. The supplied screenshot showed the dot reporting that its event-triggered run lacked event data and a message ID. No message body, private identifier, callback URL or credential was recorded in diagnostic output. The outbound event implementation matches the current [official MCP Events contract](https://developers.openai.com/plugins/build/mcp-events). The ChatGPT update is not established as the cause.
+
+Two local gaps are reproducible: the read tool previously required a message ID even when the event omitted it, and acknowledged unanswered messages could not be retried. The repair adds bounded pending-message retrieval to that same tool, explicit delayed reply reminders using the original message ID, persisted retry timing, and a more precise local connection label. Pending reads exclude unsent drafts, answered history and terminal delivery failures. Local access limits and idempotent replies remain enforced.
+
+Local validation passed 43 relay tests (one POSIX-only case skipped on Windows), 21 JavaScript tests, 16 browser interface tests, the frontend production build and public-source/secret scans. Native CI, signed release drills and a live missing-event-data recovery exchange are pending. Synthetic tests are not proof of a real dot reply. Existing plugin tool caches and subscription instructions need the documented rescan/fallback update after installation.
+
 ## v1.0.2 Windows persistence and layout repair — 6 October 2026 (Singapore)
 
 The default-artwork incident is now reproduced and diagnosed: packaged-host and ordinary Windows launches read different AppData views. The configured preferences and image remained intact in one view while the ordinary launch read a separate first-run profile. An unpackaged process confirmed the split without reading credentials. Version 1.0.2 moves Windows preferences and artwork outside AppData into the user home `.near-dot` directory; migration copies the launching profile once, preserves originals and existing new-store files, and blocks saving on read/migration failure. Mac storage and private connection configuration are unchanged.

@@ -142,6 +142,8 @@ pub struct Message {
     pub id: String,
     pub text: String,
     pub created: f64,
+    #[serde(default)]
+    pub last_attempt: f64,
     pub delivered: u8,
     pub reply: Option<String>,
 }
