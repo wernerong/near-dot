@@ -2398,7 +2398,7 @@ dependencies = [
 name = "near-dot"
 version = "1.0.3"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "minisign",
  "minisign-verify",
  "png 0.18.1",
