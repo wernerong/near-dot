@@ -36,7 +36,7 @@ reqwest = { version = "=0.13.5", default-features = false, features = ["json", "
 tokio = { version = "=1.53.2", features = ["sync", "time"] }
 sha2 = "=0.10.9"
 base64 = "=0.22.1"
-minisign-verify = "=0.2.5"
+minisign-verify = "=0.3.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-registry = "=0.6.1"
