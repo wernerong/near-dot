@@ -39,7 +39,7 @@ base64 = "=0.22.1"
 minisign-verify = "=0.2.5"
 
 [target.'cfg(windows)'.dependencies]
-windows-registry = "=0.6.1"
+windows-registry = "=0.100.0"
 
 [dev-dependencies]
 tauri = { version = "=2.12.1", features = ["test"] }
