@@ -4,9 +4,9 @@ An independent desktop pet for your existing ChatGPT dot. This branch adds a **d
 
 Set up once in **Settings → Chat connection → Dedicated ChatGPT window**. Paste the address of your existing dot, use **Test link**, sign in to ChatGPT in the new window, and confirm that the address opened the correct dot. Its browser profile persists; closing the window or restarting Windows requires no window selection or relinking. ChatGPT may require normal reauthentication when a session expires. The external window uses Microsoft Edge, not an embedded Near Dot webview. Mac retains the browser launcher for now.
 
-The app-window feature is a **1.1.0-preview.1 development change**, not included in the existing releases below. Native acceptance and its limits are tracked in [the Windows chat-app checklist](docs/CHAT-APP.md).
+**Version 1.1.0 — dedicated ChatGPT window on Windows.** See [release notes](docs/releases/1.1.0.md) and [desktop releases](https://github.com/wernerong/near-dot/releases). The Windows window adapter has passed native automated checks; signed-in ChatGPT continuity, physical-device focus and display checks remain untested. Confirm your own dot once using Test link. Mac retains the browser launcher. See [the Windows chat-app checklist](docs/CHAT-APP.md).
 
-**Version 1.0.2 — Windows settings persistence repair.** [Desktop releases](https://github.com/wernerong/near-dot/releases) contain the verified installers; [1.0.2 notes](docs/releases/1.0.2.md) describe the fix and its limits. Windows installers are not Authenticode signed; Mac bundles are ad-hoc sealed, without Developer ID/notarization, continuing the existing distribution model. OS warnings or blocking are possible. Automatic updates use mandatory cryptographic signatures. See [installation](docs/INSTALL.md) and [tested/untested evidence](docs/ACCEPTANCE.md).
+Windows installers are not Authenticode signed; Mac bundles are ad-hoc sealed, without Developer ID/notarization, continuing the existing distribution model. OS warnings or blocking are possible. Automatic updates use mandatory cryptographic signatures. See [installation](docs/INSTALL.md) and [tested/untested evidence](docs/ACCEPTANCE.md).
 
 ![Settings browser preview, without personal links](docs/settings-preview.png)
 
@@ -92,8 +92,8 @@ For a stalled live message in v1.0.3, **Request reply again** becomes available 
 
 1. In a desktop browser, open your existing dot in ChatGPT, signed into the correct account/workspace. If it exposes a distinct HTTPS address, copy the browser address bar, then open that address in a fresh tab and confirm it returns to the same dot. Do not use Share or create a public link. The official guidance does not document a dedicated private-link procedure; if no address reliably reopens your dot, leave the destination unconfigured.
 2. Paste it in Settings. Near Dot displays it locally, accepts only `https://chatgpt.com` and rejects credentials, query/fragment tokens, nonstandard ports, share and API paths.
-3. Select **Test link**. Confirm the default browser opens your existing dot. If it opens a different conversation, a login screen or an unavailable page, leave it unconfirmed and fix access in ChatGPT.
-4. Tick the test confirmation, select **Continue**, choose appearance and controls, review automatic updates, then **Finish setup**. On Windows, clicking the companion or using the shortcut opens Chat; Open ChatGPT opens your saved dot link. Other public builds open the saved link directly. Later, use the tray/menu bar’s Settings and updates to edit or test it again.
+3. Select **Test link**. In Windows app-window mode, sign in normally to ChatGPT in the dedicated Edge window and confirm it opens your existing dot. Browser mode uses the default browser. If the link opens a different conversation or an unavailable page, leave it unconfirmed and fix access in ChatGPT.
+4. Tick the test confirmation, select **Continue**, choose appearance and controls, review automatic updates, then **Finish setup**. On Windows, clicking the companion or using the shortcut restores or reopens that dedicated window. Mac opens the saved link in the browser. Later, use the tray/menu bar’s Settings and updates to edit or test it again.
 
 A released Windows installer installs for the current user and handles WebView2 setup (an internet connection is needed if WebView2 is missing). On Mac, open the matching architecture’s DMG, drag Near Dot to Applications, eject the DMG, then launch Near Dot from Applications. No terminal, API key or new login is needed for the public launcher. Detailed [installation and first-run instructions](docs/INSTALL.md) include recovery and removal.
 
@@ -141,7 +141,7 @@ Automatic checks occur after 30 seconds and every six hours; disable them in Set
 
 Package installation normally requires user action. Windows installers may close this companion and require OS approval. Mac exposes a restart action after installation. Defer hides the offer until a subsequent check; skipping suppresses that version for automatic checks, while a manual check can offer it again. Optional unattended installation is a one-time opt-in for the next manual launch, before the companion appears; login startup and a running companion never install automatically. The unattended next-launch option is experimental; the hosted updater drill does not exercise login startup, a physical OS prompt or an active user session.
 
-See [candidate notes](docs/releases/1.0.0.md), [release runbook](docs/RELEASE.md), [security policy](SECURITY.md), [privacy](PRIVACY.md), [architecture](docs/ARCHITECTURE.md) and [troubleshooting/uninstall](docs/TROUBLESHOOTING.md).
+See [release notes](docs/releases/1.1.0.md), [release runbook](docs/RELEASE.md), [security policy](SECURITY.md), [privacy](PRIVACY.md), [architecture](docs/ARCHITECTURE.md) and [troubleshooting/uninstall](docs/TROUBLESHOOTING.md).
 
 ## iPhone
 
