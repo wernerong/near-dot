@@ -74,7 +74,7 @@ fn runtime(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     }
 }
 
-fn helper(app: &tauri::AppHandle, name: &str) -> Result<Command, String> {
+pub(crate) fn helper(app: &tauri::AppHandle, name: &str) -> Result<Command, String> {
     let root = runtime(app)?;
     let python = if cfg!(target_os = "windows") {
         root.join("python/python.exe")
@@ -272,6 +272,15 @@ impl Chat {
         if let Ok(mut bridge) = self.bridge.try_lock() {
             *bridge = None;
         }
+    }
+    pub fn suspend(&self) {
+        if let Some(mut child) = self.tunnel.lock().unwrap().take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        *self.bridge.lock().unwrap() = None;
+        *self.snapshot.lock().unwrap() = Snapshot::default();
+        self.seen.lock().unwrap().clear();
     }
     pub fn connect(&self, app: &tauri::AppHandle) -> Result<(), String> {
         self.connect_inner(app, true)
@@ -509,6 +518,18 @@ impl Chat {
         app: &tauri::AppHandle,
         request: serde_json::Value,
     ) -> Result<Snapshot, String> {
+        if app
+            .state::<crate::AppState>()
+            .preferences
+            .lock()
+            .unwrap()
+            .chat_mode
+            != "relay"
+        {
+            return Err(
+                "This mode talks directly in ChatGPT. The private relay is disabled.".into(),
+            );
+        }
         require_private()?;
         let mut bridge = self.bridge.lock().unwrap();
         if bridge.is_none() {

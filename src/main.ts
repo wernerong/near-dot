@@ -59,7 +59,8 @@ async function companionUI() {
       : "Always on top disabled";
     root.style.opacity = String(p.opacity);
     root.classList.toggle("paused", p.paused || p.hidden || document.hidden);
-    const action = p.chatEnabled ? "Chat with my dot" : "Open my dot";
+    const action =
+      p.desktopChat || p.chatEnabled ? "Chat with my dot" : "Open my dot";
     element("pet").setAttribute("aria-label", action);
     element("pet").title = action;
     element("pet-reply").hidden = !p.chatEnabled;
@@ -67,6 +68,15 @@ async function companionUI() {
   apply(await call<Companion>("get_companion"));
   await bindAvatar("companion-image");
   await on<Companion>("companion-config", apply);
+  await on<string>("desktop-error", (message) => {
+    element("pet-error").textContent = message;
+  });
+  await on<boolean>("desktop-opening", (opening) => {
+    element<HTMLButtonElement>("pet").disabled = opening;
+    if (opening) element("pet-error").textContent = "Opening your chat…";
+    else if (element("pet-error").textContent === "Opening your chat…")
+      element("pet-error").textContent = "";
+  });
   await on<boolean>("reply-available", (available) => {
     const button = element("pet-reply");
     button.textContent = available ? "●" : "···";
@@ -83,7 +93,7 @@ async function companionUI() {
       root.classList.toggle("awaiting-reply", status.pending);
       element("pet").title = status.pending
         ? "Waiting for your dot’s reply"
-        : config.chatEnabled
+        : config.desktopChat || config.chatEnabled
           ? "Chat with my dot"
           : "Open my dot";
     },
@@ -157,9 +167,10 @@ async function settingsUI() {
     </section>
     <p class="scope-notice">This public preview opens your existing dot in your browser. Desktop chat, live ChatGPT replies and shared conversation history are not available.</p>
     <form id="preferences" novalidate>
-      <section class="card" id="setup-link"><div class="section-heading"><span class="step">01</span><div><h2>Where should we take you?</h2><p>Open your dot in ChatGPT on the web and copy its address bar. Use a link that reopens the same dot, not a public Share link. Sign in to your own ChatGPT account if prompted.</p></div></div>
+      <section class="card" id="setup-link"><div class="section-heading"><span class="step">01</span><div><h2>Keep your dot beside your pet</h2><p>Open your existing dot in ChatGPT on the web and copy its address bar. Use an address that reopens the same dot, not a public Share link.</p></div></div>
+        <label for="chat-mode">Chat connection</label><select id="chat-mode"><option value="app">Dedicated ChatGPT window · Windows</option><option value="browser">Default browser link</option><option value="relay">Private relay · advanced</option></select><p id="chat-mode-help" class="help">Choose how your pet opens this address.</p>
         <label for="destination">Your destination</label><div class="link-row"><input id="destination" type="url" spellcheck="false" autocomplete="off" placeholder="Paste your own HTTPS conversation link" aria-describedby="destination-help"><button type="button" id="test-link" class="secondary">Test link ↗</button></div>
-        <p id="destination-help" class="help">Only chatgpt.com HTTPS links. A copied link is not a guaranteed dot integration.</p>
+        <p id="destination-help" class="help">Only chatgpt.com HTTPS links. Test once and confirm this address opens the dot you want.</p>
         <label class="check"><input id="verified" type="checkbox"><span>I tested this link on this device and it opened my existing dot.</span></label>
         <div class="card-footer"><span>No new account. No API billing.</span><button type="button" id="open" class="text-button">Open my dot ↗</button></div>
       </section>
@@ -189,6 +200,10 @@ async function settingsUI() {
   let update: UpdateStatus | null = null;
   let testedLink = saved.verified ? saved.destination : "";
   const input = (id: string) => element<HTMLInputElement>(id);
+  const modeSelect = element<HTMLSelectElement>("chat-mode");
+  const mode = () => modeSelect.value as Preferences["chatMode"];
+  modeSelect.querySelector<HTMLOptionElement>('option[value="app"]')!.disabled =
+    !snapshot.desktopChatSupported;
   const status = (text: string, error = false) => {
     element("status").textContent = text;
     element("status").classList.toggle("error", error);
@@ -204,6 +219,30 @@ async function settingsUI() {
   } else if (snapshot.chatEnabled)
     root.querySelector(".scope-notice")!.textContent =
       "Connect this device from Chat. Relay exchanges stay local; ChatGPT history sync is unavailable.";
+  function modeChanged() {
+    const app = mode() === "app";
+    element("private-controls").hidden =
+      mode() !== "relay" || !snapshot.chatEnabled;
+    element("chat-mode-help").textContent = app
+      ? "Sign in once in this dedicated ChatGPT window. Click the pet to reuse or reopen your saved dot, including after a restart. No window selection or relinking."
+      : mode() === "relay"
+        ? "Advanced private connection; it keeps separate relay exchanges."
+        : "Your saved address opens in your default browser.";
+    root.querySelector(".scope-notice")!.textContent = app
+      ? "Talk directly in ChatGPT with its normal chat limits. Near Dot uses no Codex allowance, API key or separate AI billing. Your conversation and memory stay in ChatGPT."
+      : mode() === "relay"
+        ? snapshot.chatTransportEnabled
+          ? "The private relay keeps separate exchanges and does not mirror ChatGPT history."
+          : "Live messaging is not connected on this device. Open ChatGPT to send messages."
+        : "This mode opens your saved ChatGPT address in the default browser.";
+  }
+  modeSelect.addEventListener("change", () => {
+    if (!saved.verified) {
+      testedLink = "";
+      input("verified").checked = false;
+    }
+    modeChanged();
+  });
   function guide(focus = false) {
     element("setup-guide").hidden = !guided;
     element("setup-title").textContent = [
@@ -272,6 +311,8 @@ async function settingsUI() {
     "unattendedNextLaunch",
   ] as const;
   function fill(p: Preferences) {
+    modeSelect.value =
+      p.chatMode || (snapshot.chatEnabled ? "relay" : "browser");
     input("destination").value = p.destination;
     input("shortcut").value = p.shortcut;
     input("size").value = String(p.size);
@@ -279,6 +320,7 @@ async function settingsUI() {
     element<HTMLSelectElement>("channel").value = p.channel;
     for (const id of fields) input(id).checked = p[id];
     labels();
+    modeChanged();
   }
   function labels() {
     element("size-value").textContent = `${input("size").value}px`;
@@ -288,6 +330,7 @@ async function settingsUI() {
   function collect(): Preferences {
     return {
       ...saved,
+      chatMode: mode(),
       destination: input("destination").value.trim(),
       shortcut: input("shortcut").value.trim(),
       size: Number(input("size").value),
@@ -324,10 +367,12 @@ async function settingsUI() {
       error = destinationError(url);
     if (error) return status(error, true);
     try {
-      await call("test_destination", { url });
+      await call("test_destination", { url, mode: mode() });
       testedLink = url;
       status(
-        "Browser launch requested. If it opened your dot, tick the confirmation box.",
+        mode() === "app"
+          ? "ChatGPT window opened. Sign in if needed, then confirm that it opened your existing dot."
+          : "Browser launch requested. If it opened your dot, tick the confirmation box.",
       );
     } catch (e) {
       status(errorText(e), true);
@@ -383,7 +428,9 @@ async function settingsUI() {
         guided = false;
         guide();
         status(
-          "Setup complete. Click your companion or use your shortcut to open your saved dot. You can change these choices here anytime.",
+          saved.chatMode === "app"
+            ? "Setup complete. Click your pet or use your shortcut to bring your existing ChatGPT dot beside it. It reopens automatically after closing or restarting."
+            : "Setup complete. Click your companion or use your shortcut to open your saved dot. You can change these choices here anytime.",
         );
       }
     } catch (err) {

@@ -1,6 +1,10 @@
 # Near Dot
 
-An independent, local desktop companion for your existing dot, with a browser launcher. An explicit development build retains the experimental private Mac chat connection. Phase 1 targets **Windows x64 and Mac**; the iPhone companion is an Apple Shortcuts recipe.
+An independent desktop pet for your existing ChatGPT dot. This branch adds a **dedicated ChatGPT window on Windows**: clicking the pet focuses the real ChatGPT conversation beside it, or reopens its saved address if the window closed. ChatGPT handles the conversation and its normal limits. Near Dot makes no inference requests, uses no Codex allowance, and needs no API key or separate AI billing.
+
+Set up once in **Settings → Chat connection → Dedicated ChatGPT window**. Paste the address of your existing dot, use **Test link**, sign in to ChatGPT in the new window, and confirm that the address opened the correct dot. Its browser profile persists; closing the window or restarting Windows requires no window selection or relinking. ChatGPT may require normal reauthentication when a session expires. The external window uses Microsoft Edge, not an embedded Near Dot webview. Mac retains the browser launcher for now.
+
+The app-window feature is a **1.1.0-preview.1 development change**, not included in the existing releases below. Native acceptance and its limits are tracked in [the Windows chat-app checklist](docs/CHAT-APP.md).
 
 **Version 1.0.2 — Windows settings persistence repair.** [Desktop releases](https://github.com/wernerong/near-dot/releases) contain the verified installers; [1.0.2 notes](docs/releases/1.0.2.md) describe the fix and its limits. Windows installers are not Authenticode signed; Mac bundles are ad-hoc sealed, without Developer ID/notarization, continuing the existing distribution model. OS warnings or blocking are possible. Automatic updates use mandatory cryptographic signatures. See [installation](docs/INSTALL.md) and [tested/untested evidence](docs/ACCEPTANCE.md).
 
@@ -12,13 +16,13 @@ The older public v1.0.0 assets predate the Windows startup repair, shared chat i
 
 - Original transparent seed companion, gentle animation and hover feedback.
 - Custom local PNG icon or pet sprite-sheet import, preserving the original idle frame with metadata stripped and no upload or profile scraping.
-- On Windows, click the companion or use the shortcut to open the shared chat panel. Authorize your own private connection using **Chat → Connection options → Connect my dot** to send and receive real relay messages and reply notifications. The installer includes its local runtime; account authorization and a dot subscription are still required. Open ChatGPT launches your tested destination in the default browser.
+- On Windows, click the pet or use its global shortcut to open the dedicated ChatGPT app window. It reuses an open window and automatically recreates it from your saved dot address after closing or restarting. History and memory stay in ChatGPT, avoiding a second unsynchronized transcript. The earlier private relay is retained under the advanced connection mode.
 - Tray/menu bar access, hide/show, pause, size (48–240 logical pixels), opacity, always-on-top, position reset and settings. The desktop icon has no caption; click the image to open your dot.
 - Opt-in login startup. Keyboard access through the settings window and tray; reduced-motion support.
 - Guided first-run setup: test your destination, choose appearance and controls, review updates, then finish. Choices persist across relaunch and upgrade; existing verified installations skip the wizard.
 - Signed update adapter with progress, errors, defer/skip, stable/preview channels and staged/paused rollout.
 
-Version 1.0.1 includes per-user Windows live relay setup. Public Mac packages retain the launcher; their private MCP chat preview requires an explicit development feature. Neither route exports ChatGPT conversations, tracks global dot activity, synchronizes all memory or signs in for you. A successful browser launch is **not proof that ChatGPT opened your dot**. Your device's Test link step establishes that. Keep the actual private conversation link out of source, screenshots, issues and releases; never use a public share link.
+Earlier versions include per-user Windows live relay setup. Public Mac packages retain the launcher; their private MCP preview requires an explicit development feature. The new app-window route uses ChatGPT itself as the source of conversation history rather than copying it. Near Dot does not read chats, credentials, global activity or replies. A successful window launch is **not proof that your saved address opens the correct dot**: confirm it once using Test link. Keep the actual private conversation address out of source, screenshots, issues and releases; never use a public share link.
 
 The official integration recheck on 4 October 2026 did not establish a public dot conversation API or stable third-party deep-link contract. General API conversation state does not grant access to an existing ChatGPT dot. Desktop ChatGPT/web and a supported mobile app are the official surfaces; mobile web is unsupported. Read the [capability matrix and sources](docs/FEASIBILITY.md).
 
@@ -105,7 +109,9 @@ No desktop app scheme is enabled because the checked sources did not document an
 
 ## Desktop chat and private live messages
 
-Current Windows source and review installers include the shared chat interface and a portable local relay runtime. Choose **Chat → Connection options → Connect my dot** for per-user setup. No system Python, terminal commands or separate tunnel download are needed. The installer includes checksum-pinned Python 3.13.12 and the official tunnel client v0.0.15 with their license notices. Rust verifies every packaged runtime file against a compiled manifest before starting it. Build with `python scripts/prepare-relay-runtime.py`, then add `--config relay-runtime-config.json` to the Tauri build command; CI and the release-draft workflow do this automatically.
+The default Windows app-window mode uses the ordinary ChatGPT website and the user's saved dot address. It requires normal ChatGPT sign-in, with no runtime key, plugin or event subscription. See [setup and recovery](docs/CHAT-APP.md). The following connection instructions apply only to the advanced **Private relay** mode retained from earlier versions.
+
+The private relay includes its own chat interface and portable local runtime. Choose **Settings → Chat connection → Private relay**, then **Chat → Connection options → Connect my dot** for per-user setup. No system Python, terminal commands or separate tunnel download are needed. The installer includes checksum-pinned Python 3.13.12 and the official tunnel client v0.0.15 with their license notices. Rust verifies every packaged runtime file against a compiled manifest before starting either window controls or the relay. Build with `python scripts/prepare-relay-runtime.py`, then add `--config relay-runtime-config.json` to the Tauri build command; CI and the release-draft workflow do this automatically.
 
 Each eligible user must create their own OpenAI tunnel/runtime key, connect a private MCP plugin in their linked workspace, and enable the dot's event subscription. The guided flow opens official settings and uses a native Windows credential prompt; secrets never enter the renderer. ChatGPT browser sign-in alone does not grant this access. Workspace permissions and product availability may prevent setup. This is a guided private connection, not zero-authorization consumer onboarding. No hosted service or public plugin is added.
 

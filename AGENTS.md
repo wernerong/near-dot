@@ -1,6 +1,7 @@
 # Project instructions
 
 - Near Dot is an independent local launcher. Recheck official OpenAI integration documentation before enabling any new dot route or API.
+- The owner requires normal ChatGPT chat usage: no separate API billing, no Codex inference, and no window relinking after restarts. The Windows app-window route opens the user's verified ChatGPT URL in an external Edge app window with an owner-only persistent profile. It is not an embedded webview or a separate assistant.
 - Never scrape ChatGPT, inspect session tokens, automate its private backend, embed its website, or invent dot state, unread counts or shared memory.
 - Keep destination URLs and user identities out of source, fixtures, logs, screenshots and releases. Use explicitly synthetic fixture paths only.
 - Rust is authoritative for destination validation, settings, OS actions and updating. Renderer permissions stay narrow; remote content is forbidden.
@@ -9,5 +10,6 @@
 - Pin dependencies/actions and retain lockfiles. Run the checks in README for meaningful changes; keep tested/untested acceptance evidence honest.
 - Production keys/tokens belong only in protected release infrastructure. Never disable signature verification, TLS checks or OS protections.
 - This repository is authored by its owner. Tested changes may be committed and pushed directly to main without a pull request. Verified releases and their signed channel controls may be published without another user review; workflows still prepare drafts for artifact verification.
+- Use the established owner author identity for commits and merge directly to main; do not open pull requests for the owner's requested changes.
 - New external services and signing/store spending require the user's final review.
 - Windows x64 is the first public release target. Mac phase-1 code must pass its device checklist before a support claim. iPhone starts with the documented Shortcut recipe.

@@ -6,13 +6,15 @@ Choosing a local PNG uses a native file picker. Rust reads only the selected fil
 
 The global shortcut registers a single combination with the OS; it is not a keyboard recorder. Files are under the OS per-user application configuration directory, not the source tree. Your private URL is visible only in your local settings. Treat the preferences file and its preserved reset backup as private; OS account permissions protect them. They are not encrypted by this app.
 
-Opening your destination contacts ChatGPT in the default browser under that browser's existing session and policies. The launcher cannot see whether you are signed in, offline or using the right workspace. Account behavior and costs remain with your existing ChatGPT product.
+On Windows, the dedicated ChatGPT window contacts the ordinary ChatGPT website in external Microsoft Edge app mode. Its separate, owner-only browser profile and private window cache live under `.near-dot/chat-app` in the same per-user home settings directory. Edge stores and protects that profile's sign-in, cookies and browser data. Near Dot never reads authentication files, chats or page contents; it identifies only OS windows belonging to that profile and restores or reopens the saved address. Normal ChatGPT usage consumes the account's ChatGPT allowance, with no Codex inference or separately billed API calls.
+
+The browser launcher mode contacts ChatGPT in the default browser under that browser's existing session and policies. Near Dot cannot see whether either window is signed in, offline or using the right account/workspace. Account behavior and costs remain with the user's existing ChatGPT product.
 
 Configured release builds check public GitHub channel metadata after 30 seconds and every six hours. GitHub receives normal network metadata such as IP address and user agent. No destination, local rollout bucket or conversation content is included. Disable automatic checks in Settings. A manual check also contacts GitHub; downloads occur only after installation is requested.
 
 Diagnostic strings are generic and contain no destination or raw network URL. There is no automatic crash/diagnostic upload. Public support requests should include app version, platform and generic failure category only. Remove personal links, names, tokens and screenshots from reports.
 
-Reset local settings disables startup and preserves the old private file locally. For complete removal, follow the uninstall guide and remove that preserved file too.
+Reset local settings disables startup and preserves the old private file locally. It does not delete the dedicated Edge profile or sign-in. For complete removal, close the dedicated ChatGPT window, follow the uninstall guide, and remove the private `chat-app` directory and preserved settings file too. Close the window before deleting its profile because Edge runs independently of Near Dot.
 
 ## Optional private chat preview
 

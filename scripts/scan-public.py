@@ -22,7 +22,7 @@ for relative in paths:
     if not path.is_file() or path.suffix.lower() in {".png", ".ico", ".icns", ".gif", ".jpg"}:
         continue
     # Deliberately synthetic hostile-input fixtures are permitted only in validation tests.
-    fixture = relative in {"src-tauri/src/destination.rs", "tests/validation.test.ts", "experiments/dot-relay/test_relay.py"}
+    fixture = relative in {"src-tauri/src/destination.rs", "tests/validation.test.ts", "experiments/dot-relay/test_relay.py", "experiments/dot-relay/test_chat_app.py"}
     try:
         lines = path.read_text().splitlines()
     except (UnicodeError, OSError):

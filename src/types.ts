@@ -3,6 +3,7 @@ const { version } = pkg;
 
 export interface Preferences {
   schema: number;
+  chatMode: "app" | "browser" | "relay";
   destination: string;
   verified: boolean;
   setupCompleted: boolean;
@@ -22,6 +23,7 @@ export interface Preferences {
 }
 export const defaults: Preferences = {
   schema: 1,
+  chatMode: "browser",
   destination: "",
   verified: false,
   setupCompleted: false,
@@ -40,6 +42,7 @@ export const defaults: Preferences = {
   cohort: 0,
 };
 export interface Snapshot {
+  desktopChatSupported?: boolean;
   preferences: Preferences;
   warning: string | null;
   version: string;
@@ -50,6 +53,7 @@ export interface Snapshot {
   updateStatus: UpdateStatus | null;
 }
 export interface Companion {
+  desktopChat?: boolean;
   chatEnabled: boolean;
   alwaysOnTop: boolean;
   size: number;

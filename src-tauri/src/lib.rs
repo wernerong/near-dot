@@ -1,5 +1,6 @@
 mod avatar;
 mod chat;
+mod desktop;
 mod destination;
 mod geometry;
 mod preferences;
@@ -208,6 +209,17 @@ fn show_latest_reply(app: &tauri::AppHandle) {
     }
 }
 fn show_chat(app: &tauri::AppHandle) {
+    if app
+        .state::<AppState>()
+        .preferences
+        .lock()
+        .unwrap()
+        .chat_mode
+        != "relay"
+    {
+        let _ = activate(app);
+        return;
+    }
     if !chat::enabled() {
         show_settings(app);
         return;
@@ -232,7 +244,33 @@ fn show_chat(app: &tauri::AppHandle) {
     }
 }
 fn activate(app: &tauri::AppHandle) -> Result<(), String> {
-    if chat::enabled() {
+    let preferences = app.state::<AppState>().preferences.lock().unwrap().clone();
+    if preferences.chat_mode == "app" {
+        if !preferences.verified || preferences.destination.is_empty() {
+            show_settings(app);
+            return Err("Test and save your dot’s address once in Settings.".into());
+        }
+        if app
+            .state::<desktop::Desktop>()
+            .opening
+            .swap(true, Ordering::Relaxed)
+        {
+            return Ok(());
+        }
+        let app = app.clone();
+        let _ = app.emit_to("companion", "desktop-opening", true);
+        tauri::async_runtime::spawn_blocking(move || {
+            if let Err(message) = desktop::open(&app, &preferences.destination) {
+                let _ = app.emit_to("companion", "desktop-error", &message);
+                let _ = app.emit_to("settings", "app-error", &message);
+            }
+            app.state::<desktop::Desktop>()
+                .opening
+                .store(false, Ordering::Relaxed);
+            let _ = app.emit_to("companion", "desktop-opening", false);
+        });
+        Ok(())
+    } else if preferences.chat_mode == "relay" && chat::enabled() {
         show_chat(app);
         Ok(())
     } else {
@@ -310,6 +348,16 @@ async fn chat_setup(w: WebviewWindow, app: tauri::AppHandle, action: String) -> 
     if w.label() != "chat" {
         return Err("Set up your connection from Chat.".into());
     }
+    if app
+        .state::<AppState>()
+        .preferences
+        .lock()
+        .unwrap()
+        .chat_mode
+        != "relay"
+    {
+        return Err("Private relay setup is disabled in this chat mode.".into());
+    }
     let url = match action.as_str() {
         "tunnels" => Some("https://platform.openai.com/settings/organization/tunnels"),
         "keys" => Some("https://platform.openai.com/settings/organization/api-keys"),
@@ -347,9 +395,30 @@ fn chat_monitor(app: tauri::AppHandle) {
             if app.state::<chat::Chat>().stopped() {
                 break;
             }
+            if app
+                .state::<AppState>()
+                .preferences
+                .lock()
+                .unwrap()
+                .chat_mode
+                != "relay"
+            {
+                std::thread::sleep(Duration::from_secs(1));
+                continue;
+            }
             let result = app
                 .state::<chat::Chat>()
                 .request(&app, serde_json::json!({"operation":"snapshot"}));
+            if app
+                .state::<AppState>()
+                .preferences
+                .lock()
+                .unwrap()
+                .chat_mode
+                != "relay"
+            {
+                continue;
+            }
             let snapshot = result.unwrap_or_else(|_| {
                 let chat = app.state::<chat::Chat>();
                 let mut saved = chat.snapshot.lock().unwrap();
@@ -507,7 +576,7 @@ fn persist(app: &tauri::AppHandle) -> Result<(), String> {
 fn companion_data(app: &tauri::AppHandle) -> serde_json::Value {
     let s = app.state::<AppState>();
     let p = s.preferences.lock().unwrap();
-    serde_json::json!({"size":p.size,"opacity":p.opacity,"paused":p.paused,"hidden":s.hidden.load(Ordering::Relaxed),"configured":p.verified,"chatEnabled":chat::enabled(),"alwaysOnTop":app.get_webview_window("companion").and_then(|w| w.is_always_on_top().ok()).unwrap_or(false)})
+    serde_json::json!({"size":p.size,"opacity":p.opacity,"paused":p.paused,"hidden":s.hidden.load(Ordering::Relaxed),"configured":p.verified,"desktopChat":p.chat_mode == "app","chatEnabled":p.chat_mode == "relay" && chat::enabled(),"alwaysOnTop":app.get_webview_window("companion").and_then(|w| w.is_always_on_top().ok()).unwrap_or(false)})
 }
 fn changed(app: &tauri::AppHandle) {
     let _ = app.emit_to("companion", "companion-config", companion_data(app));
@@ -541,7 +610,7 @@ fn get_preferences(w: WebviewWindow, app: tauri::AppHandle) -> Result<serde_json
     let s = app.state::<AppState>();
     let preferences = s.preferences.lock().unwrap().clone();
     Ok(
-        serde_json::json!({"preferences":preferences,"warning":s.load_error.lock().unwrap().clone().or(s.shortcut_warning.lock().unwrap().clone()),"version":app.package_info().version.to_string(),"setupRequired":preferences.needs_setup(),"chatEnabled":chat::enabled(),"chatTransportEnabled":chat::transport_enabled(),"updatesConfigured":updates::configured(&app),"updateStatus":s.update_status.lock().unwrap().clone()}),
+        serde_json::json!({"preferences":preferences,"warning":s.load_error.lock().unwrap().clone().or(s.shortcut_warning.lock().unwrap().clone()),"version":app.package_info().version.to_string(),"setupRequired":preferences.needs_setup(),"desktopChatSupported":cfg!(target_os = "windows"),"chatEnabled":chat::enabled(),"chatTransportEnabled":chat::transport_enabled(),"updatesConfigured":updates::configured(&app),"updateStatus":s.update_status.lock().unwrap().clone()}),
     )
 }
 #[tauri::command]
@@ -556,12 +625,30 @@ fn open_destination(w: WebviewWindow, app: tauri::AppHandle) -> Result<(), Strin
     launch(&app)
 }
 #[tauri::command]
-fn test_destination(w: WebviewWindow, app: tauri::AppHandle, url: String) -> Result<(), String> {
+async fn test_destination(
+    w: WebviewWindow,
+    app: tauri::AppHandle,
+    url: String,
+    mode: Option<String>,
+) -> Result<(), String> {
     settings_only(&w)?;
     let url = destination::validate(&url)?;
-    app.opener()
-        .open_url(&url, None::<&str>)
-        .map_err(|_| "Browser launch failed.".to_string())?;
+    if mode.as_deref() == Some("app") {
+        let handle = app.clone();
+        let target = url.clone();
+        tauri::async_runtime::spawn_blocking(move || desktop::open(&handle, &target))
+            .await
+            .map_err(|_| "The ChatGPT app window could not open.")??;
+    } else if mode
+        .as_deref()
+        .is_none_or(|m| ["browser", "relay"].contains(&m))
+    {
+        app.opener()
+            .open_url(&url, None::<&str>)
+            .map_err(|_| "Browser launch failed.".to_string())?;
+    } else {
+        return Err("Unknown chat connection mode.".into());
+    }
     *app.state::<AppState>().tested_destination.lock().unwrap() = Some(url);
     Ok(())
 }
@@ -573,6 +660,9 @@ fn save_preferences(
 ) -> Result<(), String> {
     settings_only(&w)?;
     preferences.validate()?;
+    if preferences.chat_mode == "app" && !cfg!(target_os = "windows") {
+        return Err("The dedicated ChatGPT app window is currently available on Windows.".into());
+    }
     let s = app.state::<AppState>();
     if s.load_error.lock().unwrap().is_some() {
         return Err("Repair settings first; the original file is preserved.".into());
@@ -619,6 +709,21 @@ fn save_preferences(
         let _ = app.global_shortcut().unregister(old.shortcut.as_str());
     }
     *s.preferences.lock().unwrap() = preferences.clone();
+    if preferences.chat_mode != "relay" && old.chat_mode == "relay" {
+        let handle = app.clone();
+        tauri::async_runtime::spawn_blocking(move || handle.state::<chat::Chat>().suspend());
+        let _ = app.emit_to(
+            "companion",
+            "chat-indicator",
+            serde_json::json!({"pending":false,"connected":false}),
+        );
+        let _ = app.emit_to("companion", "reply-available", false);
+        for label in ["chat", "bubble"] {
+            if let Some(w) = app.get_webview_window(label) {
+                let _ = w.hide();
+            }
+        }
+    }
     if let Some(pet) = app.get_webview_window("companion") {
         set_floating(&pet, preferences.always_on_top).map_err(|_| {
             "Settings saved, but always-on-top could not be applied. Restart the app to retry."
@@ -872,6 +977,7 @@ pub fn run() {
                 last_move: Mutex::new(std::time::Instant::now()),
             });
             app.manage(chat::Chat::default());
+            app.manage(desktop::Desktop::default());
             // Webview creation pumps native events and can receive UI IPC.
             // Register both states before any configured window is created.
             for config in &app.config().app.windows {

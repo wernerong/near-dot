@@ -5,6 +5,7 @@ use std::{fs, io::Write, path::Path};
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct Preferences {
     pub schema: u32,
+    pub chat_mode: String,
     pub destination: String,
     pub verified: bool,
     pub setup_completed: bool,
@@ -26,6 +27,12 @@ impl Default for Preferences {
     fn default() -> Self {
         Self {
             schema: 1,
+            chat_mode: if cfg!(target_os = "windows") {
+                "app"
+            } else {
+                "browser"
+            }
+            .into(),
             destination: String::new(),
             verified: false,
             setup_completed: false,
@@ -57,6 +64,9 @@ impl Preferences {
     pub fn validate(&self) -> Result<(), String> {
         if self.schema != 1 {
             return Err("Settings schema is unsupported; use a newer recovery release.".into());
+        }
+        if !["app", "browser", "relay"].contains(&self.chat_mode.as_str()) {
+            return Err("Unknown chat connection mode.".into());
         }
         if !self.destination.is_empty() {
             super::destination::validate(&self.destination)?;
@@ -92,6 +102,16 @@ pub fn load(path: &Path) -> Result<Preferences, String> {
         .map_err(|_| "Settings are invalid; the original file has been preserved.".to_string())?;
     let mut p: Preferences = serde_json::from_value(fields.clone())
         .map_err(|_| "Settings are invalid; the original file has been preserved.".to_string())?;
+    if fields.get("chatMode").is_none() {
+        p.chat_mode = if cfg!(target_os = "windows") {
+            "app"
+        } else if super::chat::enabled() {
+            "relay"
+        } else {
+            "browser"
+        }
+        .into();
+    }
     // A verified destination in the old schema already completed its original setup.
     if fields.get("setupCompleted").is_none() && p.verified {
         p.setup_completed = true;
@@ -191,6 +211,17 @@ mod tests {
         assert!(!load(&path).unwrap().needs_setup());
         fs::write(&path, r#"{"schema":1,"destination":"https://chatgpt.com/c/synthetic-legacy","verified":true,"alwaysOnTop":false}"#).unwrap();
         let legacy = load(&path).unwrap();
+        assert_eq!(legacy.destination, "https://chatgpt.com/c/synthetic-legacy");
+        assert_eq!(
+            legacy.chat_mode,
+            if cfg!(target_os = "windows") {
+                "app"
+            } else if super::super::chat::enabled() {
+                "relay"
+            } else {
+                "browser"
+            }
+        );
         assert!(!legacy.needs_setup());
         assert!(!legacy.always_on_top);
         assert!(Preferences {

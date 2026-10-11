@@ -5,50 +5,56 @@ import { defaults } from "../../src/types";
 test("Windows opens the shared chat interface without enabling a transport", async ({
   page,
 }) => {
-  await page.addInitScript((preferences) => {
-    const w = window as unknown as {
-      isTauri: boolean;
-      __TAURI_INTERNALS__: object;
-    };
-    w.isTauri = true;
-    w.__TAURI_INTERNALS__ = {
-      transformCallback: () => 1,
-      invoke: async (command: string, args?: { action?: string }) => {
-        if (command === "plugin:event|listen") return 1;
-        if (command === "get_avatar") return { dataUrl: null, warning: null };
-        if (command === "get_companion")
-          return {
-            ...preferences,
-            hidden: false,
-            configured: false,
-            chatEnabled: true,
-          };
-        if (command === "get_preferences")
-          return {
-            preferences,
-            warning: null,
-            version: "1.0.0",
-            setupRequired: false,
-            chatEnabled: true,
-            chatTransportEnabled: false,
-            updatesConfigured: false,
-            updateStatus: null,
-          };
-        if (command === "get_chat")
-          return {
-            connected: false,
-            state: "interface-only",
-            expiresIn: null,
-            messages: [],
-          };
-        if (command === "companion_action" || command === "open_destination") {
-          sessionStorage.setItem("synthetic-action", args?.action || command);
-          return;
-        }
-        throw new Error("Unexpected synthetic command");
-      },
-    };
-  }, defaults);
+  await page.addInitScript(
+    (preferences) => {
+      const w = window as unknown as {
+        isTauri: boolean;
+        __TAURI_INTERNALS__: object;
+      };
+      w.isTauri = true;
+      w.__TAURI_INTERNALS__ = {
+        transformCallback: () => 1,
+        invoke: async (command: string, args?: { action?: string }) => {
+          if (command === "plugin:event|listen") return 1;
+          if (command === "get_avatar") return { dataUrl: null, warning: null };
+          if (command === "get_companion")
+            return {
+              ...preferences,
+              hidden: false,
+              configured: false,
+              chatEnabled: true,
+            };
+          if (command === "get_preferences")
+            return {
+              preferences,
+              warning: null,
+              version: "1.0.0",
+              setupRequired: false,
+              chatEnabled: true,
+              chatTransportEnabled: false,
+              updatesConfigured: false,
+              updateStatus: null,
+            };
+          if (command === "get_chat")
+            return {
+              connected: false,
+              state: "interface-only",
+              expiresIn: null,
+              messages: [],
+            };
+          if (
+            command === "companion_action" ||
+            command === "open_destination"
+          ) {
+            sessionStorage.setItem("synthetic-action", args?.action || command);
+            return;
+          }
+          throw new Error("Unexpected synthetic command");
+        },
+      };
+    },
+    { ...defaults, chatMode: "relay" },
+  );
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?view=companion");
   await page.locator("#pet").click();
