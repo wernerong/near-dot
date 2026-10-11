@@ -97,10 +97,16 @@ if os.name == 'nt':
             } | ForEach-Object { [int]$_.ProcessId })
             ConvertTo-Json -Compress -InputObject $ids'''
             powershell = Path(os.environ['WINDIR']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
-            result = subprocess.run([str(powershell), '-NoProfile', '-NonInteractive', '-EncodedCommand',
-                                     base64.b64encode(script.encode('utf-16le')).decode()],
-                                    input=str(self.profile).encode('utf-8'), stdout=subprocess.PIPE,
-                                    stderr=subprocess.DEVNULL, timeout=8, creationflags=0x08000000)
+            try:
+                # A cold CIM provider can take longer than eight seconds to
+                # initialize. Keep discovery bounded within the native caller's
+                # 45-second deadline; subsequent queries are normally warm.
+                result = subprocess.run([str(powershell), '-NoProfile', '-NonInteractive', '-EncodedCommand',
+                                         base64.b64encode(script.encode('utf-16le')).decode()],
+                                        input=str(self.profile).encode('utf-8'), stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL, timeout=20, creationflags=0x08000000)
+            except subprocess.TimeoutExpired:
+                raise AppError('Windows is still finding this companion’s browser profile. Try again.') from None
             try:
                 values = json.loads(result.stdout.decode('utf-8-sig'))
                 if result.returncode or not isinstance(values, list) or not all(type(v) is int for v in values):

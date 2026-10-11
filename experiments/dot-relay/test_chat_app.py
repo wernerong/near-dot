@@ -45,7 +45,7 @@ class ChatAppTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.directory = Path(self.temp.name) / 'state'
+        self.directory = Path(self.temp.name).resolve() / 'state'
         self.desktop = DesktopFixture()
         self.app = ChatApp(self.directory, self.desktop)
 
@@ -125,6 +125,21 @@ class ChatAppTests(unittest.TestCase):
         from privacy import private_directory
         desktop = Windows(private_directory(self.directory / 'synthetic-unused-profile'))
         self.assertEqual(desktop.windows(), [])
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows profile discovery timeout diagnostics')
+    def test_windows_profile_query_timeout_has_no_launch_arguments_or_profile_path(self):
+        from chat_app import Windows
+        from privacy import private_directory
+        import subprocess
+        desktop = Windows(private_directory(self.directory / 'synthetic-timeout-profile'))
+        failure = subprocess.TimeoutExpired(['synthetic-private-command'], 20)
+        with patch('chat_app.subprocess.run', side_effect=failure):
+            with self.assertRaises(AppError) as raised:
+                desktop.roots()
+        message = str(raised.exception)
+        self.assertIn('Try again', message)
+        self.assertNotIn(str(desktop.profile), message)
+        self.assertNotIn('synthetic-private-command', message)
 
     @unittest.skipUnless(os.name == 'nt', 'Native synthetic Edge app window; no ChatGPT login or inference')
     def test_windows_creates_registers_and_restores_an_external_app_window(self):
