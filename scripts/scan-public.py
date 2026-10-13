@@ -24,7 +24,7 @@ for relative in paths:
     # Deliberately synthetic hostile-input fixtures are permitted only in validation tests.
     fixture = relative in {"src-tauri/src/destination.rs", "tests/validation.test.ts", "experiments/dot-relay/test_relay.py", "experiments/dot-relay/test_chat_app.py"}
     try:
-        lines = path.read_text().splitlines()
+        lines = path.read_text(encoding='utf-8').splitlines()
     except (UnicodeError, OSError):
         continue
     for number, line in enumerate(lines, 1):

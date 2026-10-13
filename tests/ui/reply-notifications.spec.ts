@@ -37,7 +37,7 @@ async function receiverFixture(page: Page, notifications = false) {
             replyNotifications: notifications,
             setupCompleted: true,
             verified: true,
-            destination: "https://chatgpt.com/c/synthetic-notification-chat",
+          destination: "https://chatgpt.com/c/synthetic-notice",
           };
           if (command === "plugin:event|listen") {
             events.set(args!.event!, args!.handler!);
