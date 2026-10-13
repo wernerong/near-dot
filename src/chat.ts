@@ -280,11 +280,20 @@ export async function bubbleUI() {
   document.body.className = "bubble-window";
   el("app").innerHTML =
     `<aside class="reply-bubble" aria-label="Reply from your dot"><button id="bubble-open" class="bubble-open"><strong>Your dot replied</strong><span id="bubble-text">Click to read and respond.</span></button><button id="bubble-dismiss" class="bubble-dismiss" aria-label="Dismiss reply">×</button></aside>`;
+  let receivedPreview = false;
   await on<{ text: string }>("reply-preview", (value) => {
+    receivedPreview = true;
     el("bubble-text").textContent = value.text;
   });
   el("bubble-open").onclick = () =>
     void call("companion_action", { action: "chat" });
   el("bubble-dismiss").onclick = () =>
     void call("companion_action", { action: "dismiss-reply" });
+  try {
+    const initial = await call<{ text: string }>("get_reply_preview");
+    // A newer incoming notice can arrive while the initial read is in flight.
+    if (!receivedPreview) el("bubble-text").textContent = initial.text;
+  } catch {
+    // Retain the accessible default and continue listening if the read fails.
+  }
 }

@@ -58,7 +58,7 @@
         "title": "Near Dot reply",
         "url": "index.html?view=bubble",
         "width": 300,
-        "height": 110,
+        "height": 200,
         "decorations": false,
         "transparent": true,
         "shadow": false,

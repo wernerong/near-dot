@@ -857,10 +857,7 @@ footer .text-button {
   margin-bottom: 5px;
 }
 .bubble-open span {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: block;
   font-size: 12px;
   font-weight: 400;
   line-height: 1.4;

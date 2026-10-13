@@ -1,13 +1,19 @@
 import { test, expect, type Page } from "@playwright/test";
 import { defaults } from "../../src/types";
 
-async function receiverFixture(page: Page, notifications = false) {
+async function receiverFixture(
+  page: Page,
+  notifications = false,
+  initialPreview = "Click to read and respond.",
+  delayedPreview = false,
+) {
   await page.addInitScript(
-    ({ defaults, notifications }) => {
+    ({ defaults, notifications, initialPreview, delayedPreview }) => {
       const w = window as unknown as {
         isTauri: boolean;
         __TAURI_INTERNALS__: object;
         syntheticNotice: (event: string, payload: unknown) => void;
+        syntheticResolvePreview: (text: string) => void;
       };
       w.isTauri = true;
       let serial = 0;
@@ -37,11 +43,18 @@ async function receiverFixture(page: Page, notifications = false) {
             replyNotifications: notifications,
             setupCompleted: true,
             verified: true,
-          destination: "https://chatgpt.com/c/synthetic-notice",
+            destination: "https://chatgpt.com/c/synthetic-notice",
           };
           if (command === "plugin:event|listen") {
             events.set(args!.event!, args!.handler!);
             return serial;
+          }
+          if (command === "get_reply_preview") {
+            if (delayedPreview)
+              return new Promise((resolve) => {
+                w.syntheticResolvePreview = (text) => resolve({ text });
+              });
+            return { text: initialPreview };
           }
           if (command === "get_avatar") return { dataUrl: null, warning: null };
           if (command === "get_preferences")
@@ -84,7 +97,7 @@ async function receiverFixture(page: Page, notifications = false) {
         },
       };
     },
-    { defaults, notifications },
+    { defaults, notifications, initialPreview, delayedPreview },
   );
 }
 
@@ -161,4 +174,53 @@ test("a bubble treats incoming previews as literal text and opens the actual cha
       sessionStorage.getItem("synthetic-notification-action"),
     ),
   ).toBe("chat");
+});
+
+test("the first visible bubble loads the whole bounded preview without a click or event", async ({
+  page,
+}) => {
+  const text = "合成".repeat(80);
+  await receiverFixture(page, true, text);
+  await page.setViewportSize({ width: 300, height: 200 });
+  await page.goto("/?view=bubble");
+  await expect(page.locator("#bubble-text")).toHaveText(text);
+  const bounds = await page.locator("#bubble-text").boundingBox();
+  expect(bounds!.y + bounds!.height).toBeLessThan(196);
+  expect(
+    await page
+      .locator("#bubble-text")
+      .evaluate((node) => node.scrollHeight <= node.clientHeight),
+  ).toBe(true);
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("synthetic-notification-action"),
+    ),
+  ).toBeNull();
+});
+
+test("an incoming preview wins over a delayed initial snapshot", async ({
+  page,
+}) => {
+  await receiverFixture(page, true, "Synthetic old preview", true);
+  await page.goto("/?view=bubble");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          typeof (window as unknown as { syntheticResolvePreview?: unknown })
+            .syntheticResolvePreview,
+      ),
+    )
+    .toBe("function");
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      syntheticNotice: (event: string, payload: unknown) => void;
+      syntheticResolvePreview: (text: string) => void;
+    };
+    w.syntheticNotice("reply-preview", { text: "Synthetic current preview" });
+    w.syntheticResolvePreview("Synthetic old preview");
+  });
+  await expect(page.locator("#bubble-text")).toHaveText(
+    "Synthetic current preview",
+  );
 });

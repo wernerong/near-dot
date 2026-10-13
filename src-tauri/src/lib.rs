@@ -217,7 +217,7 @@ fn show_latest_reply(app: &tauri::AppHandle) {
         } else {
             "Your dot replied. Click to read and respond.".into()
         };
-        let _ = app.emit_to("bubble", "reply-preview", serde_json::json!({"text":text}));
+        publish_reply_preview(app, &text);
         place_near_companion(app, "bubble");
         if let Some(w) = app.get_webview_window("bubble") {
             // Explicit menu/button action may focus a reply for keyboard access.
@@ -529,11 +529,7 @@ fn chat_monitor(app: tauri::AppHandle) {
                         } else {
                             "Your dot replied. Click to read and respond.".into()
                         };
-                        let _ = app.emit_to(
-                            "bubble",
-                            "reply-preview",
-                            serde_json::json!({"text":text}),
-                        );
+                        publish_reply_preview(&app, &text);
                         place_near_companion(&app, "bubble");
                         if let Some(w) = app.get_webview_window("bubble") {
                             let _ = set_floating(
@@ -563,6 +559,41 @@ fn chat_monitor(app: tauri::AppHandle) {
         }
     });
 }
+fn publish_reply_preview(app: &tauri::AppHandle, text: &str) {
+    // A hidden WebView can receive its first event before the renderer starts
+    // listening. Keep the bounded display text available for initial hydration.
+    *app.state::<chat::Chat>().bubble_preview.lock().unwrap() = Some(text.into());
+    let _ = app.emit_to("bubble", "reply-preview", serde_json::json!({"text":text}));
+}
+fn bubble_preview_for<R: tauri::Runtime>(
+    w: &WebviewWindow<R>,
+) -> Result<serde_json::Value, String> {
+    if w.label() != "bubble" {
+        return Err("Reply previews are only available to the reply bubble.".into());
+    }
+    let app = w.app_handle();
+    let enabled = app
+        .state::<AppState>()
+        .preferences
+        .lock()
+        .unwrap()
+        .reply_preview;
+    let text = if enabled {
+        app.state::<chat::Chat>()
+            .bubble_preview
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| "Click to read and respond.".into())
+    } else {
+        "Your dot replied. Click to read and respond.".into()
+    };
+    Ok(serde_json::json!({"text":text}))
+}
+#[tauri::command]
+fn get_reply_preview(w: WebviewWindow) -> Result<serde_json::Value, String> {
+    bubble_preview_for(&w)
+}
 fn show_reply_bubble(app: &tauri::AppHandle, preview: &str, focus: bool) -> bool {
     let p = app.state::<AppState>().preferences.lock().unwrap().clone();
     let text: String = if p.reply_preview && !preview.is_empty() {
@@ -570,7 +601,7 @@ fn show_reply_bubble(app: &tauri::AppHandle, preview: &str, focus: bool) -> bool
     } else {
         "Your dot replied. Click to read and respond.".into()
     };
-    let _ = app.emit_to("bubble", "reply-preview", serde_json::json!({"text":text}));
+    publish_reply_preview(app, &text);
     place_near_companion(app, "bubble");
     if let Some(w) = app.get_webview_window("bubble") {
         let _ = set_floating(&w, p.always_on_top);
@@ -1281,6 +1312,7 @@ pub fn run() {
             connect_notifications,
             chat_setup,
             get_chat,
+            get_reply_preview,
             send_chat,
             retry_chat,
             get_avatar,
@@ -1309,6 +1341,15 @@ pub fn run() {
 #[cfg(test)]
 mod window_startup_tests {
     use super::*;
+
+    #[test]
+    fn companion_cannot_request_reply_bubble_text() {
+        let app = tauri::test::mock_app();
+        let window = tauri::WebviewWindowBuilder::new(&app, "companion", Default::default())
+            .build()
+            .unwrap();
+        assert!(bubble_preview_for(&window).is_err());
+    }
 
     #[test]
     fn configured_windows_are_deferred_until_setup() {

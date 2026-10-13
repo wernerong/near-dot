@@ -38,6 +38,8 @@ export async function call<T = void>(
       messages: [],
     } as T;
   if (command === "get_avatar") return { dataUrl: null, warning: null } as T;
+  if (command === "get_reply_preview")
+    return { text: "Click to read and respond." } as T;
   if (command === "save_preferences") {
     previewPreferences = { ...(args?.preferences as typeof defaults) };
     return undefined as T;

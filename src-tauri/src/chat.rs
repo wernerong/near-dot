@@ -204,6 +204,7 @@ pub struct Chat {
     pub snapshot: Mutex<Snapshot>,
     pub seen: Mutex<Vec<String>>,
     pub latest_notification: Mutex<Option<ReplyNotification>>,
+    pub bubble_preview: Mutex<Option<String>>,
 }
 struct Bridge {
     child: Child,
