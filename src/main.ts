@@ -219,6 +219,7 @@ async function settingsUI() {
     <div class="update-buttons"><button type="button" id="notification-resume" class="secondary">Reconnect notifications</button><button type="button" id="notification-plugins" class="secondary">Open plugin settings</button></div>
     <details><summary>Set up a new connection</summary><p>Create your own tunnel and a key with Tunnels Read + Use. Enter the key only in the native prompt.</p><div class="update-buttons"><button type="button" id="notification-tunnels">Open tunnels</button><button type="button" id="notification-keys">Open key settings</button><button type="button" id="notification-configure">Enter connection</button></div></details>
     <p>Refresh your Near Dot plugin’s tools, then tell your dot: “Send a Near Dot desktop notification after each reply in this conversation.” Keep this preference in the dot’s instructions.</p>
+    <p class="help">If your dot still sees the older connection tools, ask it to check Near Dot’s notification support using its existing connection readiness check.</p>
     <p class="help">Notifications depend on your dot calling the connected tool. Near Dot does not inspect the browser or detect every ChatGPT reply.</p>
     <p id="notification-setup-status" role="status" class="help"></p>
     <button type="button" id="notification-close">Close</button>

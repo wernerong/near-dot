@@ -133,6 +133,55 @@ class NotificationTests(unittest.TestCase):
         self.assertFalse(value['connected'])
         self.assertEqual(value['state'], 'expired')
 
+    def test_cached_two_tool_catalog_can_send_an_idempotent_notification_without_chat_or_events(self):
+        mailbox = Relay(self.state, post=lambda *args: self.fail('A notice must not send an event'))
+        self.addCleanup(mailbox.close)
+        self.assertNotIn('reply_notification', mailbox.tool('read_test_message', {'message_id': 'connection-check'}))
+        self.assertFalse(self.inbox.path.exists())
+        self.inbox.configure(True)
+        check = mailbox.tool('read_test_message', {'message_id': 'connection-check'})
+        slot = check['reply_notification']
+        self.assertFalse(check['is_message'])
+        self.assertFalse(slot['is_chat_message'])
+        self.assertEqual(slot['max_preview_characters'], 160)
+        self.assertEqual(slot['reply_tool'], 'reply_to_test_message')
+        self.assertEqual(self.inbox.pending(), [])
+        self.assertNotEqual(slot['message_id'], mailbox.tool('read_test_message', {'message_id': 'connection-check'})['reply_notification']['message_id'])
+        arguments = {'message_id': slot['message_id'], 'reply': 'Synthetic cached-catalog reply'}
+        first = mailbox.tool('reply_to_test_message', arguments)
+        self.assertEqual(first, mailbox.tool('reply_to_test_message', arguments))
+        self.assertEqual(first['kind'], 'reply_notification')
+        self.assertEqual(len(self.inbox.pending()), 1)
+        self.assertEqual(mailbox.status()['messages'], 0)
+        self.assertFalse(mailbox.status()['active_subscription'])
+        with self.assertRaises(NotificationError):
+            mailbox.tool('reply_to_test_message', {**arguments, 'reply': 'Synthetic conflicting reply'})
+        self.inbox.acknowledge([first['notification_id']])
+        mailbox.tool('reply_to_test_message', arguments)
+        self.assertEqual(self.inbox.pending(), [])
+
+    def test_compatibility_slot_rejects_disabled_expired_invalid_or_oversized_notices(self):
+        mailbox = Relay(self.state)
+        self.addCleanup(mailbox.close)
+        self.inbox.configure(True)
+        slot = mailbox.tool('read_test_message', {'message_id': 'connection-check'})['reply_notification']
+        arguments = {'message_id': slot['message_id'], 'reply': 'Synthetic notice'}
+        with self.assertRaises(NotificationError):
+            mailbox.tool('reply_to_test_message', {**arguments, 'reply': 'x' * 161})
+        with self.assertRaises(RelayError):
+            mailbox.tool('reply_to_test_message', {**arguments, 'message_id': 'notification:../synthetic'})
+        self.inbox.configure(False)
+        with self.assertRaises(NotificationError):
+            mailbox.tool('reply_to_test_message', arguments)
+        self.inbox.configure(True)
+        with mailbox.db:
+            mailbox.db.execute('INSERT INTO proof_window VALUES(1,0)')
+        self.assertNotIn('reply_notification', mailbox.tool('read_test_message', {'message_id': 'connection-check'}))
+        with self.assertRaises(RelayError):
+            mailbox.tool('reply_to_test_message', arguments)
+        self.assertEqual(self.inbox.pending(), [])
+        self.assertEqual(mailbox.status()['messages'], 0)
+
 
 if __name__ == '__main__':
     unittest.main()

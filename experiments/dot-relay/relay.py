@@ -32,6 +32,7 @@ MAX_TEXT = 1024
 MAX_BODY = 262144
 REPLY_RETRY_SECONDS = 180
 PENDING_LIMIT = 10
+NOTIFICATION_PREFIX = "notification:"
 REPO = Path(__file__).resolve().parents[2]
 
 
@@ -308,10 +309,23 @@ class Relay:
             raise RelayError("unknown_tool")
         if name == "read_test_message" and arguments == {"message_id": "connection-check"}:
             grant = self.db.execute("SELECT deadline FROM proof_window WHERE singleton=1").fetchone()
-            return {"kind": "connection_check", "relay_reachable": True,
+            remaining = self.status()["proof_seconds_remaining"]
+            result = {"kind": "connection_check", "relay_reachable": True,
                     "connection_deadline": utc(grant[0]) if grant and not self.persistent else None,
-                    "remaining_seconds": self.status()["proof_seconds_remaining"],
+                    "remaining_seconds": remaining,
                     "owner_controlled_deadline": not self.persistent, "is_message": False}
+            # Existing dot conversations can retain an older two-tool catalog
+            # after a plugin refresh. Offer a notification-only reply slot via
+            # the already documented harmless readiness check. No chat row or
+            # event is created, and retries reuse the returned slot ID.
+            from notifications import Notifications, MAX_PREVIEW
+            if remaining != 0 and Notifications(self.state).enabled():
+                result["reply_notification"] = {
+                    "message_id": NOTIFICATION_PREFIX + secrets.token_hex(16),
+                    "reply_tool": "reply_to_test_message",
+                    "max_preview_characters": MAX_PREVIEW,
+                    "is_chat_message": False}
+            return result
         window = self.db.execute("SELECT deadline FROM proof_window WHERE singleton=1").fetchone()
         if not self.persistent and window and time.time() >= window[0]:
             raise RelayError("proof_window_expired")
@@ -330,6 +344,13 @@ class Relay:
         expected = {"message_id"} if name == "read_test_message" else {"message_id", "reply"}
         if set(arguments) != expected:
             raise RelayError("invalid_tool_arguments")
+        mid = arguments["message_id"]
+        if name == "reply_to_test_message" and isinstance(mid, str) and mid.startswith(NOTIFICATION_PREFIX):
+            notice_id = mid[len(NOTIFICATION_PREFIX):]
+            if len(notice_id) != 32 or any(char not in "0123456789abcdef" for char in notice_id):
+                raise RelayError("invalid_notification_id")
+            from notifications import Notifications
+            return Notifications(self.state).notify({"notification_id": notice_id, "preview": arguments["reply"]})
         message = self.db.execute("SELECT * FROM messages WHERE id=?", (arguments["message_id"],)).fetchone()
         if not message:
             raise RelayError("unknown_message")
@@ -364,8 +385,8 @@ class Relay:
                 if not read:
                     properties["reply"] = {"type": "string", "minLength": 1, "maxLength": MAX_TEXT}
                 tools.append({"name": name,
-                              "description": ("Read a Near Dot message using data.message_id from its event, not eventId. If the event has no message ID, omit message_id or use pending to retrieve up to 10 unanswered submitted messages. Reply using each returned message_id; repeat while has_more is true. This does not return unsent drafts or ChatGPT history. For a harmless readiness check, use connection-check."
-                                              if read else "Return your response to one Near Dot message to the user's local chat. Use its message_id from read_test_message. Repeated identical replies are safe; an existing reply cannot be replaced. Never include unrelated chat history, credentials or private account data."),
+                              "description": ("Read a Near Dot message using data.message_id from its event, not eventId. If the event has no message ID, omit message_id or use pending to retrieve up to 10 unanswered submitted messages. Reply using each returned message_id; repeat while has_more is true. This does not return unsent drafts or ChatGPT history. For a harmless readiness check, use connection-check. When locally enabled, that check also returns a notification-only reply slot for catalogs missing notify_reply; it creates no chat message."
+                                              if read else "Return your response to one Near Dot message to the user's local chat. Use its message_id from read_test_message. Repeated identical replies are safe; an existing reply cannot be replaced. A reply_notification slot from connection-check sends only a desktop notification: use its exact message_id, limit reply to max_preview_characters, and reuse the ID for retries. Prefer notify_reply when available. Never include unrelated chat history, credentials or private account data."),
                               "inputSchema": {"type": "object", "properties": properties,
                                               "required": [] if read else list(properties), "additionalProperties": False},
                               "annotations": {"readOnlyHint": read, "destructiveHint": False,
