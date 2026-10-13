@@ -8,7 +8,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from chat_app import AppError, ChatApp, validate_url
+from chat_app import AppError, ChatApp, browser_kind, browser_directory, browser_binary, validate_url
 from privacy import write_new
 
 URL = 'https://chatgpt.com/c/synthetic-app'
@@ -57,6 +57,30 @@ class ChatAppTests(unittest.TestCase):
         self.open()
         self.assertEqual(self.desktop.launches, [(URL, RECT)])
         self.assertEqual(self.desktop.shown, [(101, RECT, True), (101, RECT, True)])
+
+    def test_default_browser_selection_does_not_silently_substitute_edge(self):
+        self.assertEqual(browser_kind('ChromeHTML'), 'chrome')
+        self.assertEqual(browser_kind('ChromeHTML.synthetic'), 'chrome')
+        self.assertEqual(browser_kind('MSEdgeHTM'), 'edge')
+        for value in ('FirefoxURL', 'unknown', None, 'chrome.exe --synthetic-flag'):
+            with self.assertRaises(AppError):
+                browser_kind(value)
+
+    def test_chrome_profile_and_cache_do_not_replace_the_existing_edge_store(self):
+        self.open()
+        original = self.app.file.read_bytes()
+        chrome = ChatApp(browser_directory(self.directory, 'chrome'), DesktopFixture())
+        chrome.open(URL, RECT, True)
+        self.assertEqual(self.app.file.read_bytes(), original)
+        self.assertNotEqual(chrome.file, self.app.file)
+        self.assertEqual(browser_directory(self.directory, 'edge'), self.directory)
+
+    def test_browser_binary_selection_uses_only_fixed_install_paths(self):
+        with patch.dict('chat_app.os.environ', {'ProgramFiles': '/synthetic/apps'}, clear=True), patch('chat_app.Path.is_file', return_value=True):
+            self.assertEqual(browser_binary('chrome'), Path('/synthetic/apps/Google/Chrome/Application/chrome.exe'))
+            self.assertEqual(browser_binary('edge'), Path('/synthetic/apps/Microsoft/Edge/Application/msedge.exe'))
+            with self.assertRaises(AppError):
+                browser_binary('synthetic-custom-command')
 
     def test_near_dot_restart_reuses_window_without_any_selection(self):
         self.open()
@@ -123,7 +147,7 @@ class ChatAppTests(unittest.TestCase):
     def test_windows_profile_query_excludes_unrelated_edge_windows(self):
         from chat_app import Windows
         from privacy import private_directory
-        desktop = Windows(private_directory(self.directory / 'synthetic-unused-profile'))
+        desktop = Windows(private_directory(self.directory / 'synthetic-unused-profile'), 'edge')
         self.assertEqual(desktop.windows(), [])
 
     @unittest.skipUnless(os.name == 'nt', 'Windows profile discovery timeout diagnostics')
@@ -131,7 +155,7 @@ class ChatAppTests(unittest.TestCase):
         from chat_app import Windows
         from privacy import private_directory
         import subprocess
-        desktop = Windows(private_directory(self.directory / 'synthetic-timeout-profile'))
+        desktop = Windows(private_directory(self.directory / 'synthetic-timeout-profile'), 'edge')
         failure = subprocess.TimeoutExpired(['synthetic-private-command'], 20)
         with patch('chat_app.subprocess.run', side_effect=failure):
             with self.assertRaises(AppError) as raised:
@@ -143,11 +167,18 @@ class ChatAppTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == 'nt', 'Native synthetic Edge app window; no ChatGPT login or inference')
     def test_windows_creates_registers_and_restores_an_external_app_window(self):
+        self.native_browser_window('edge')
+
+    @unittest.skipUnless(os.name == 'nt', 'Native synthetic Chrome app window; no ChatGPT login or inference')
+    def test_windows_chrome_creates_registers_and_restores_an_external_app_window(self):
+        self.native_browser_window('chrome')
+
+    def native_browser_window(self, kind):
         from chat_app import Windows
         from privacy import private_directory
         import ctypes as c
         from ctypes import wintypes as w
-        desktop = Windows(private_directory(self.directory / 'synthetic-window-profile'))
+        desktop = Windows(private_directory(self.directory / ('synthetic-' + kind + '-window-profile')), kind)
         desktop.launch('data:text/html,<title>Synthetic Near Dot test</title><p>Local native window fixture</p>', RECT)
         try:
             deadline = time.monotonic() + 20
@@ -156,7 +187,7 @@ class ChatAppTests(unittest.TestCase):
                 windows = desktop.windows()
                 if not windows:
                     time.sleep(0.2)
-            self.assertTrue(windows, 'Synthetic Edge app did not create an OS window.')
+            self.assertTrue(windows, 'Synthetic browser app did not create an OS window.')
             target = windows[0]
             desktop.mark(target)
             self.assertTrue(target['marker'])

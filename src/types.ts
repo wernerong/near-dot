@@ -13,6 +13,7 @@ export interface Preferences {
   alwaysOnTop: boolean;
   paused: boolean;
   replyPreview: boolean;
+  replyNotifications: boolean;
   startup: boolean;
   autoCheck: boolean;
   unattendedNextLaunch: boolean;
@@ -33,6 +34,7 @@ export const defaults: Preferences = {
   alwaysOnTop: true,
   paused: false,
   replyPreview: false,
+  replyNotifications: false,
   startup: false,
   autoCheck: true,
   unattendedNextLaunch: false,
@@ -53,6 +55,7 @@ export interface Snapshot {
   updateStatus: UpdateStatus | null;
 }
 export interface Companion {
+  replyNotifications?: boolean;
   desktopChat?: boolean;
   chatEnabled: boolean;
   alwaysOnTop: boolean;

@@ -1,4 +1,4 @@
-"""An external Edge app window for the saved ChatGPT dot address.
+"""An external default-browser app window for the saved ChatGPT dot address.
 
 Normal ChatGPT web UI owns messages, history, authentication and plan limits.
 No inference requests, scraping, token reads, debugging port or embedded webview.
@@ -23,6 +23,49 @@ class AppError(Exception):
     pass
 
 
+def browser_kind(prog_id):
+    if isinstance(prog_id, str):
+        value = prog_id.lower()
+        if value == 'chromehtml' or value.startswith('chromehtml.'):
+            return 'chrome'
+        if value == 'msedgehtm':
+            return 'edge'
+    raise AppError('The dedicated chat window supports Chrome and Edge. Set either as your default browser, or choose Default browser in Near Dot Settings.')
+
+
+def default_browser():
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r'Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice') as key:
+            prog_id = winreg.QueryValueEx(key, 'ProgId')[0]
+    except OSError:
+        raise AppError('Windows could not identify your default HTTPS browser. Choose Chrome or Edge in Windows default apps, then try again.') from None
+    return browser_kind(prog_id)
+
+
+def browser_binary(kind):
+    relatives = {'chrome': 'Google/Chrome/Application/chrome.exe',
+                 'edge': 'Microsoft/Edge/Application/msedge.exe'}
+    if kind not in relatives:
+        raise AppError('Unsupported chat browser.')
+    candidates = [Path(os.environ[name]) / relatives[kind]
+                  for name in ('ProgramFiles', 'ProgramFiles(x86)', 'LOCALAPPDATA') if name in os.environ]
+    binary = next((path for path in candidates if path.is_file()), None)
+    if not binary:
+        label = 'Google Chrome' if kind == 'chrome' else 'Microsoft Edge'
+        raise AppError(label + ' is your selected browser but could not be found. Install or repair it, then try again.')
+    return binary
+
+
+def browser_directory(directory, kind):
+    # Keep the existing Edge profile/cache intact. Browser cookie encryption and
+    # profile formats are not interchangeable; Chrome gets its own private store.
+    if kind not in ('chrome', 'edge'):
+        raise AppError('Unsupported chat browser.')
+    return directory / 'chrome' if kind == 'chrome' else directory
+
+
 def validate_url(value):
     if not isinstance(value, str) or len(value) > 2048 or any(c.isspace() or ord(c) < 32 for c in value) or '\\' in value:
         raise AppError('Use your tested HTTPS ChatGPT dot address.')
@@ -44,13 +87,11 @@ if os.name == 'nt':
     from ctypes import wintypes as w
 
     class Windows:
-        def __init__(self, profile):
+        def __init__(self, profile, kind=None):
             self.profile = profile
-            candidates = [Path(os.environ[name]) / 'Microsoft/Edge/Application/msedge.exe'
-                          for name in ('ProgramFiles(x86)', 'ProgramFiles', 'LOCALAPPDATA') if name in os.environ]
-            self.binary = next((path for path in candidates if path.is_file()), None)
-            if not self.binary:
-                raise AppError('Microsoft Edge is required for the Windows chat window. Install or repair Edge, then try again.')
+            self.kind = kind or default_browser()
+            self.binary = browser_binary(self.kind)
+            self.process_name = self.binary.name.lower()
             self.user = c.WinDLL('user32', use_last_error=True)
             self.kernel = c.WinDLL('kernel32', use_last_error=True)
             self.callback = c.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
@@ -88,10 +129,13 @@ if os.name == 'nt':
             script = r'''$ErrorActionPreference='Stop'
             [Console]::InputEncoding=New-Object System.Text.UTF8Encoding($false)
             [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false)
-            $profile=[Console]::In.ReadToEnd()
+            $request=[Console]::In.ReadToEnd()|ConvertFrom-Json
+            $profile=$request.profile
+            $name=$request.name
+            if($name -notin @('chrome.exe','msedge.exe')){throw 'Unsupported browser'}
             $escaped=[Regex]::Escape($profile)
             $pattern='(?i)(?:^|\s)(?:"--user-data-dir='+$escaped+'"|--user-data-dir="'+$escaped+'"|--user-data-dir='+$escaped+')(?:\s|$)'
-            $ids=@(Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" | Where-Object {
+            $ids=@(Get-CimInstance Win32_Process -Filter "Name='$name'" | Where-Object {
                 $_.CommandLine -and $_.CommandLine -match $pattern -and
                 $_.CommandLine -notmatch '(?:^|\s)"?--type='
             } | ForEach-Object { [int]$_.ProcessId })
@@ -103,7 +147,7 @@ if os.name == 'nt':
                 # 45-second deadline; subsequent queries are normally warm.
                 result = subprocess.run([str(powershell), '-NoProfile', '-NonInteractive', '-EncodedCommand',
                                          base64.b64encode(script.encode('utf-16le')).decode()],
-                                        input=str(self.profile).encode('utf-8'), stdout=subprocess.PIPE,
+                                        input=json.dumps({'profile': str(self.profile), 'name': self.process_name}).encode('utf-8'), stdout=subprocess.PIPE,
                                         stderr=subprocess.DEVNULL, timeout=20, creationflags=0x08000000)
             except subprocess.TimeoutExpired:
                 raise AppError('Windows is still finding this companion’s browser profile. Try again.') from None
@@ -132,7 +176,7 @@ if os.name == 'nt':
                 try:
                     path = c.create_unicode_buffer(32768)
                     size = w.DWORD(len(path))
-                    if not self.kernel.QueryFullProcessImageNameW(process, 0, path, c.byref(size)) or Path(path.value).name.lower() != 'msedge.exe':
+                    if not self.kernel.QueryFullProcessImageNameW(process, 0, path, c.byref(size)) or Path(path.value).name.lower() != self.process_name:
                         return True
                     created, exited, kernel, user = (w.FILETIME() for _ in range(4))
                     if not self.kernel.GetProcessTimes(process, *[c.byref(x) for x in (created, exited, kernel, user)]):
@@ -150,8 +194,8 @@ if os.name == 'nt':
             return result
 
         def launch(self, url, rect):
-            # A real, separate Edge window. No remote debugging or browser
-            # extensions; Edge handles login and encrypted cookie persistence.
+            # A real, separate browser window. No remote debugging or injected
+            # extensions; the browser handles login and encrypted cookies.
             subprocess.Popen([str(self.binary), '--user-data-dir=' + str(self.profile),
                               '--app=' + url, '--no-first-run', '--no-default-browser-check',
                               '--window-size=' + str(rect[2]) + ',' + str(rect[3]),
@@ -228,14 +272,14 @@ class ChatApp:
                 target = next((w for w in current if (w['handle'], w['pid'], w['created']) not in previous), None)
                 if target:
                     break
-                # Edge may reuse its own existing app window when reopening.
+                # The browser may reuse its own existing app window when reopening.
                 focused = self.desktop.foreground()
                 target = next((w for w in current if w['handle'] == focused), None)
                 if target:
                     break
                 time.sleep(0.2)
             if target is None:
-                raise AppError('ChatGPT was asked to open. If Edge is still starting, click the pet again in a moment.')
+                raise AppError('ChatGPT was asked to open. If your browser is still starting, click the pet again in a moment.')
             self.desktop.mark(target)
             self.save({'schema': 1, 'url': url, 'window': target})
         self.desktop.show(target, rect, topmost)
@@ -255,9 +299,10 @@ def main():
         value = json.loads(data)
         if not isinstance(value, dict) or value.get('operation') != 'open':
             raise AppError('Unknown chat app action.')
-        directory = private_directory(args.state)
+        kind = default_browser()
+        directory = private_directory(browser_directory(args.state, kind))
         profile = private_directory(directory / 'browser')
-        ChatApp(directory, Windows(profile)).open(value.get('url'), value.get('rect'), value.get('topmost'))
+        ChatApp(directory, Windows(profile, kind)).open(value.get('url'), value.get('rect'), value.get('topmost'))
         result = {'ok': True}
     except AppError as error:
         result = {'error': str(error)}

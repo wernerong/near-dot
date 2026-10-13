@@ -304,7 +304,7 @@ class Relay:
         return self.flush(message_id)
 
     def tool(self, name, arguments):
-        if name not in ("read_test_message", "reply_to_test_message"):
+        if name not in ("read_test_message", "reply_to_test_message", "notify_reply"):
             raise RelayError("unknown_tool")
         if name == "read_test_message" and arguments == {"message_id": "connection-check"}:
             grant = self.db.execute("SELECT deadline FROM proof_window WHERE singleton=1").fetchone()
@@ -315,6 +315,9 @@ class Relay:
         window = self.db.execute("SELECT deadline FROM proof_window WHERE singleton=1").fetchone()
         if not self.persistent and window and time.time() >= window[0]:
             raise RelayError("proof_window_expired")
+        if name == "notify_reply":
+            from notifications import Notifications
+            return Notifications(self.state).notify(arguments)
         if name == "read_test_message" and arguments in ({}, {"message_id": "pending"}):
             # Event-triggered runs may lack event data. Recover only messages the
             # owner has already submitted, never unsent drafts or answered history.
@@ -366,6 +369,16 @@ class Relay:
                               "inputSchema": {"type": "object", "properties": properties,
                                               "required": [] if read else list(properties), "additionalProperties": False},
                               "annotations": {"readOnlyHint": read, "destructiveHint": False,
+                                              "idempotentHint": True, "openWorldHint": False}})
+            from notifications import Notifications
+            if Notifications(self.state).enabled():
+                tools.append({"name": "notify_reply",
+                              "description": "After sending your normal reply in this user's ChatGPT dot conversation, send a small notification to their Near Dot desktop pet. The user must enable reply notifications locally. Choose a unique notification_id for this answer and reuse it for retries. Optional preview is at most 160 characters of this answer, never unrelated conversation history, credentials or private account data. This tool does not send another chat message, run inference or read ChatGPT history. Notifications are kept in a bounded local inbox; retries are deduplicated while retained.",
+                              "inputSchema": {"type": "object", "properties": {
+                                  "notification_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{8,128}$"},
+                                  "preview": {"type": "string", "maxLength": 160}},
+                                  "required": ["notification_id"], "additionalProperties": False},
+                              "annotations": {"readOnlyHint": False, "destructiveHint": False,
                                               "idempotentHint": True, "openWorldHint": False}})
             return {"tools": tools}
         if method == "tools/call":

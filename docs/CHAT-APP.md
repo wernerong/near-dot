@@ -2,7 +2,7 @@
 
 The requirement is to keep the actual ChatGPT dot, use normal ChatGPT chat limits, and avoid relinking windows. A separate API assistant or subscription-backed Codex companion would use a different conversation or allowance. Neither is used here.
 
-Near Dot opens the user's verified HTTPS dot address in **Microsoft Edge app mode**, outside Tauri. The ordinary ChatGPT site receives messages typed by the user and stores its own history and memory. There is no second transcript to synchronize. This relies on the user's existing tested address, not an invented dot API or URL scheme.
+Near Dot opens the user's verified HTTPS dot address in **the default Chrome or Edge browser's app mode**, outside Tauri. The ordinary ChatGPT site receives messages typed by the user and stores its own history and memory. This relies on the user's existing tested address, not an invented dot API or URL scheme. Other default browsers require selecting the ordinary Default browser link mode; dedicated mode does not silently substitute Edge.
 
 ## Setup and daily use
 
@@ -13,18 +13,26 @@ Near Dot opens the user's verified HTTPS dot address in **Microsoft Edge app mod
 
 Existing Windows preferences retain their saved address, verification, artwork, size and other choices. The new `chatMode` field defaults to the app window. The advanced private relay remains selectable. Mac retains its existing launcher/private-preview routing until its app-window adapter is implemented and tested.
 
-The open window is cached automatically. On subsequent pet clicks it is restored and focused. If the window closes, its process changes, its handle is reused, or Windows restarts, Near Dot opens the saved ChatGPT address again and registers the new window automatically. There is no window picker or relink operation. The Edge profile stays under the same non-virtualized `.near-dot/chat-app` settings directory across Near Dot upgrades and Windows launches.
+The open window is cached automatically. On subsequent pet clicks it is restored and focused. If the window closes, its process changes, its handle is reused, or Windows restarts, Near Dot opens the saved ChatGPT address again and registers the new window automatically. There is no window picker or relink operation. The existing Edge profile/cache stay under `.near-dot/chat-app`; Chrome has its separate private profile/cache under `.near-dot/chat-app/chrome`. Both are outside AppData virtualization. Switching browsers requires one normal sign-in in the new profile and preserves the original profile. Near Dot never copies authentication data between them.
 
-ChatGPT can require normal sign-in or MFA after a session expires. Internet and Microsoft Edge are required. If the user navigates to another conversation inside the open ChatGPT window, that is ChatGPT's current conversation; Near Dot does not inspect page contents or force navigation while a conversation is open. Close that window and click the pet to reopen the saved dot.
+ChatGPT can require normal sign-in or MFA after a session expires. Internet and the selected Chrome or Edge installation are required. If the user navigates to another conversation inside the open ChatGPT window, that is ChatGPT's current conversation; Near Dot does not inspect page contents or force navigation while a conversation is open. Close that window and click the pet to reopen the saved dot.
+
+## Incoming reply bubbles
+
+Enable and save **Incoming reply notifications beside the pet** in Settings. Reuse the computer's authorized Near Dot plugin, reconnect the receiver if necessary, refresh the plugin's tools, and ask the dot to send a Near Dot notification for its replies in this conversation. A new user must authorize their own private connection once; browser sign-in does not grant this access.
+
+The dot's `notify_reply` tool sends only a notice with a unique retry ID and an optional preview of up to 160 characters. It does not queue a relay chat message, send an event, perform inference or retrieve ChatGPT history. The local receiver works without an event subscription. It polls the protected inbox, displays the latest notice without requesting focus and acknowledges only the observed batch after successful display. Clicking the bubble or reply badge opens the actual dedicated ChatGPT window. Notices coalesce into the latest bubble; up to 50 records are retained and only already consumed records are recycled at capacity. Unconsumed notices survive restarting or hiding Near Dot. Text previews remain off unless explicitly enabled.
+
+This is dot-requested notification delivery, not automatic browser completion detection. The dot must invoke the tool; no guarantee is made that every reply will call it. Disabling notifications rejects incoming tool calls while retaining saved notices, keys and chat history. There is no additional inference API or Codex billing route.
 
 ## Boundaries
 
 - Near Dot sends no inference requests and has no paid fallback. User messages use whatever ChatGPT model and plan the user selects in the ordinary ChatGPT UI.
-- The persistent, owner-only Edge profile is separate from the default browser profile. Edge owns login and cookie encryption. Near Dot never reads cookie databases, authentication files or tokens.
+- Each persistent, owner-only profile is separate from the user's ordinary browser profile. Chrome or Edge owns login and cookie encryption. Near Dot never reads cookie databases, authentication files or tokens.
 - No ChatGPT scraping, private backend automation, injected JavaScript, browser extension or remote debugging port is used. No remote content is loaded into Tauri.
-- Public Windows APIs restore, place and focus only windows belonging to Near Dot's dedicated Edge profile. CIM examines Edge launch arguments to identify that profile; only matching process IDs leave the query. Other window titles or message contents are not read.
+- Public Windows APIs restore, place and focus only windows belonging to the selected dedicated browser profile. CIM examines that browser's launch arguments to identify the profile; only matching process IDs leave the query. Other window titles or message contents are not read.
 - Cached process creation times plus a per-window property prevent handle reuse from targeting an unrelated window. The saved ChatGPT address never appears in diagnostics or release artifacts.
-- The pet does not report global dot state, unread counts, reply snippets or AI progress. Its brief “Opening your chat” status concerns an OS window operation only.
+- The pet does not report global dot state, unread counts or AI progress. Its brief “Opening your chat” status concerns an OS window operation only. An opt-in reply preview comes from an explicit plugin notification, never browser inspection.
 
 ## Acceptance
 

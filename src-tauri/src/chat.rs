@@ -18,6 +18,15 @@ pub fn enabled() -> bool {
 pub fn transport_enabled() -> bool {
     cfg!(target_os = "windows") || cfg!(all(feature = "private-relay", target_os = "macos"))
 }
+fn request_allowed(mode: &str, notifications: bool, operation: Option<&str>) -> bool {
+    mode == "relay"
+        || (mode == "app"
+            && notifications
+            && matches!(
+                operation,
+                Some("notification-snapshot" | "ack-notifications")
+            ))
+}
 
 fn script(app: &tauri::AppHandle, name: &str) -> Result<std::path::PathBuf, String> {
     if cfg!(debug_assertions) {
@@ -148,6 +157,12 @@ pub struct Message {
     pub reply: Option<String>,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ReplyNotification {
+    pub id: String,
+    pub preview: String,
+    pub created: f64,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     #[serde(default)]
@@ -157,6 +172,10 @@ pub struct Snapshot {
     pub state: String,
     pub expires_in: Option<u64>,
     pub messages: Vec<Message>,
+    #[serde(default)]
+    pub notifications: Vec<ReplyNotification>,
+    #[serde(default)]
+    pub notifications_configured: bool,
 }
 impl Default for Snapshot {
     fn default() -> Self {
@@ -172,6 +191,8 @@ impl Default for Snapshot {
             .into(),
             expires_in: None,
             messages: vec![],
+            notifications: vec![],
+            notifications_configured: false,
         }
     }
 }
@@ -182,6 +203,7 @@ pub struct Chat {
     stopped: AtomicBool,
     pub snapshot: Mutex<Snapshot>,
     pub seen: Mutex<Vec<String>>,
+    pub latest_notification: Mutex<Option<ReplyNotification>>,
 }
 struct Bridge {
     child: Child,
@@ -246,7 +268,17 @@ impl Bridge {
         let mut snapshot: Snapshot =
             serde_json::from_value(value.clone()).map_err(|_| "Invalid chat state.")?;
         snapshot.setup_supported = cfg!(target_os = "windows");
-        if snapshot.messages.len() > 50
+        if snapshot.notifications.len() > 50
+            || snapshot.notifications.iter().any(|n| {
+                n.preview.chars().count() > 160
+                    || n.id.len() > 128
+                    || n.id.len() < 8
+                    || !n
+                        .id
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            })
+            || snapshot.messages.len() > 50
             || snapshot.messages.iter().any(|m| {
                 m.text.chars().count() > 1024
                     || m.reply.as_ref().is_some_and(|r| r.chars().count() > 1024)
@@ -292,7 +324,14 @@ impl Chat {
         #[cfg(not(target_os = "windows"))]
         let _ = resume;
         require_private()?;
-        let snapshot = self.request(app, serde_json::json!({"operation":"snapshot"}))?;
+        let notification_mode = app
+            .state::<crate::AppState>()
+            .preferences
+            .lock()
+            .unwrap()
+            .chat_mode
+            == "app";
+        let snapshot = self.request(app, serde_json::json!({"operation":if notification_mode {"notification-snapshot"} else {"snapshot"}}))?;
         if snapshot.connected {
             return Ok(());
         }
@@ -518,18 +557,40 @@ impl Chat {
         app: &tauri::AppHandle,
         request: serde_json::Value,
     ) -> Result<Snapshot, String> {
-        if app
+        let preferences = app
             .state::<crate::AppState>()
             .preferences
             .lock()
             .unwrap()
-            .chat_mode
-            != "relay"
-        {
+            .clone();
+        if !request_allowed(
+            &preferences.chat_mode,
+            preferences.reply_notifications,
+            request.get("operation").and_then(|v| v.as_str()),
+        ) {
             return Err(
                 "This mode talks directly in ChatGPT. The private relay is disabled.".into(),
             );
         }
+        self.bridge_request(app, request)
+    }
+
+    pub fn configure_notifications(
+        &self,
+        app: &tauri::AppHandle,
+        enabled: bool,
+    ) -> Result<Snapshot, String> {
+        self.bridge_request(
+            app,
+            serde_json::json!({"operation":"configure-notifications", "enabled":enabled}),
+        )
+    }
+
+    fn bridge_request(
+        &self,
+        app: &tauri::AppHandle,
+        request: serde_json::Value,
+    ) -> Result<Snapshot, String> {
         require_private()?;
         let mut bridge = self.bridge.lock().unwrap();
         if bridge.is_none() {
@@ -555,6 +616,31 @@ pub fn validate_message(text: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dedicated_chat_allows_only_opted_in_notification_operations() {
+        assert!(request_allowed("app", true, Some("notification-snapshot")));
+        assert!(request_allowed("app", true, Some("ack-notifications")));
+        for operation in [
+            "send",
+            "retry",
+            "snapshot",
+            "configure-notifications",
+            "extend",
+            "notify_reply",
+        ] {
+            assert!(!request_allowed("app", true, Some(operation)));
+        }
+        assert!(!request_allowed(
+            "app",
+            false,
+            Some("notification-snapshot")
+        ));
+        assert!(!request_allowed(
+            "browser",
+            true,
+            Some("notification-snapshot")
+        ));
+    }
     #[test]
     fn transport_capability_starts_disconnected() {
         assert_eq!(

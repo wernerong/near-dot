@@ -175,6 +175,27 @@ fn place_near_companion(app: &tauri::AppHandle, label: &str) {
     }
 }
 fn show_latest_reply(app: &tauri::AppHandle) {
+    if app
+        .state::<AppState>()
+        .preferences
+        .lock()
+        .unwrap()
+        .chat_mode
+        == "app"
+    {
+        if let Some(notice) = app
+            .state::<chat::Chat>()
+            .latest_notification
+            .lock()
+            .unwrap()
+            .clone()
+        {
+            show_reply_bubble(app, &notice.preview, true);
+        } else {
+            show_chat(app);
+        }
+        return;
+    }
     let reply = app
         .state::<chat::Chat>()
         .snapshot
@@ -217,6 +238,10 @@ fn show_chat(app: &tauri::AppHandle) {
         .chat_mode
         != "relay"
     {
+        let _ = app.emit_to("companion", "reply-available", false);
+        if let Some(b) = app.get_webview_window("bubble") {
+            let _ = b.hide();
+        }
         let _ = activate(app);
         return;
     }
@@ -249,6 +274,10 @@ fn activate(app: &tauri::AppHandle) -> Result<(), String> {
         if !preferences.verified || preferences.destination.is_empty() {
             show_settings(app);
             return Err("Test and save your dot’s address once in Settings.".into());
+        }
+        let _ = app.emit_to("companion", "reply-available", false);
+        if let Some(b) = app.get_webview_window("bubble") {
+            let _ = b.hide();
         }
         if app
             .state::<desktop::Desktop>()
@@ -343,19 +372,29 @@ async fn connect_chat(w: WebviewWindow, app: tauri::AppHandle) -> Result<(), Str
         .map_err(|_| "Reconnect could not complete.")?
 }
 #[tauri::command]
+async fn connect_notifications(w: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    settings_only(&w)?;
+    let prefs = app.state::<AppState>().preferences.lock().unwrap().clone();
+    if !cfg!(target_os = "windows") || prefs.chat_mode != "app" || !prefs.reply_notifications {
+        return Err("Enable and save incoming reply notifications first.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || app.state::<chat::Chat>().connect(&app))
+        .await
+        .map_err(|_| "The notification connection could not start.")?
+}
+#[tauri::command]
 async fn chat_setup(w: WebviewWindow, app: tauri::AppHandle, action: String) -> Result<(), String> {
     known(&w)?;
-    if w.label() != "chat" {
+    let preferences = app.state::<AppState>().preferences.lock().unwrap().clone();
+    let notification_setup = w.label() == "settings"
+        && cfg!(target_os = "windows")
+        && preferences.chat_mode == "app"
+        && preferences.reply_notifications
+        && ["tunnels", "keys", "plugins", "guide", "configure"].contains(&action.as_str());
+    if w.label() != "chat" && !notification_setup {
         return Err("Set up your connection from Chat.".into());
     }
-    if app
-        .state::<AppState>()
-        .preferences
-        .lock()
-        .unwrap()
-        .chat_mode
-        != "relay"
-    {
+    if preferences.chat_mode != "relay" && !notification_setup {
         return Err("Private relay setup is disabled in this chat mode.".into());
     }
     let url = match action.as_str() {
@@ -388,6 +427,7 @@ async fn chat_setup(w: WebviewWindow, app: tauri::AppHandle, action: String) -> 
 fn chat_monitor(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         let mut initialized = false;
+        let mut notification_mode = false;
         let mut last_connection_attempt = std::time::Instant::now()
             .checked_sub(std::time::Duration::from_secs(30))
             .unwrap();
@@ -395,14 +435,27 @@ fn chat_monitor(app: tauri::AppHandle) {
             if app.state::<chat::Chat>().stopped() {
                 break;
             }
-            if app
-                .state::<AppState>()
-                .preferences
-                .lock()
-                .unwrap()
-                .chat_mode
-                != "relay"
-            {
+            let preferences = app.state::<AppState>().preferences.lock().unwrap().clone();
+            let notifications = cfg!(target_os = "windows")
+                && preferences.chat_mode == "app"
+                && preferences.reply_notifications;
+            if notifications {
+                if !notification_mode {
+                    let _ = app
+                        .state::<chat::Chat>()
+                        .configure_notifications(&app, true);
+                    notification_mode = true;
+                    initialized = false;
+                }
+                notification_tick(&app, &mut last_connection_attempt);
+                std::thread::sleep(Duration::from_secs(2));
+                continue;
+            }
+            if notification_mode {
+                notification_mode = false;
+                initialized = false;
+            }
+            if preferences.chat_mode != "relay" {
                 std::thread::sleep(Duration::from_secs(1));
                 continue;
             }
@@ -510,6 +563,66 @@ fn chat_monitor(app: tauri::AppHandle) {
         }
     });
 }
+fn show_reply_bubble(app: &tauri::AppHandle, preview: &str, focus: bool) -> bool {
+    let p = app.state::<AppState>().preferences.lock().unwrap().clone();
+    let text: String = if p.reply_preview && !preview.is_empty() {
+        preview.chars().take(160).collect()
+    } else {
+        "Your dot replied. Click to read and respond.".into()
+    };
+    let _ = app.emit_to("bubble", "reply-preview", serde_json::json!({"text":text}));
+    place_near_companion(app, "bubble");
+    if let Some(w) = app.get_webview_window("bubble") {
+        let _ = set_floating(&w, p.always_on_top);
+        let _ = w.set_focusable(focus);
+        if w.show().is_ok() && w.is_visible().unwrap_or(false) {
+            if focus {
+                let _ = w.set_focus();
+            }
+            let _ = app.emit_to("companion", "reply-available", true);
+            return true;
+        }
+    }
+    false
+}
+fn notification_tick(app: &tauri::AppHandle, last_attempt: &mut std::time::Instant) {
+    let chat = app.state::<chat::Chat>();
+    let Ok(snapshot) = chat.request(
+        app,
+        serde_json::json!({"operation":"notification-snapshot"}),
+    ) else {
+        return;
+    };
+    let preferences = app.state::<AppState>().preferences.lock().unwrap().clone();
+    if preferences.chat_mode != "app" || !preferences.reply_notifications {
+        return;
+    }
+    let _ = app.emit_to("settings", "notification-status", serde_json::json!({"configured":snapshot.notifications_configured,"connected":snapshot.connected}));
+    if !snapshot.transport_running
+        && snapshot.state == "disconnected"
+        && last_attempt.elapsed() >= Duration::from_secs(30)
+    {
+        *last_attempt = std::time::Instant::now();
+        let _ = chat.auto_connect(app);
+    }
+    if app.state::<AppState>().hidden.load(Ordering::Relaxed) {
+        return;
+    }
+    if let Some(notice) = snapshot.notifications.last() {
+        if show_reply_bubble(app, &notice.preview, false) {
+            *chat.latest_notification.lock().unwrap() = Some(notice.clone());
+            let ids: Vec<&str> = snapshot
+                .notifications
+                .iter()
+                .map(|n| n.id.as_str())
+                .collect();
+            let _ = chat.request(
+                app,
+                serde_json::json!({"operation":"ack-notifications","notificationIds":ids}),
+            );
+        }
+    }
+}
 fn launch(app: &tauri::AppHandle) -> Result<(), String> {
     let p = app.state::<AppState>().preferences.lock().unwrap().clone();
     if !p.verified || p.destination.is_empty() {
@@ -576,7 +689,7 @@ fn persist(app: &tauri::AppHandle) -> Result<(), String> {
 fn companion_data(app: &tauri::AppHandle) -> serde_json::Value {
     let s = app.state::<AppState>();
     let p = s.preferences.lock().unwrap();
-    serde_json::json!({"size":p.size,"opacity":p.opacity,"paused":p.paused,"hidden":s.hidden.load(Ordering::Relaxed),"configured":p.verified,"desktopChat":p.chat_mode == "app","chatEnabled":p.chat_mode == "relay" && chat::enabled(),"alwaysOnTop":app.get_webview_window("companion").and_then(|w| w.is_always_on_top().ok()).unwrap_or(false)})
+    serde_json::json!({"size":p.size,"opacity":p.opacity,"paused":p.paused,"hidden":s.hidden.load(Ordering::Relaxed),"configured":p.verified,"desktopChat":p.chat_mode == "app","replyNotifications":p.chat_mode == "app" && p.reply_notifications,"chatEnabled":p.chat_mode == "relay" && chat::enabled(),"alwaysOnTop":app.get_webview_window("companion").and_then(|w| w.is_always_on_top().ok()).unwrap_or(false)})
 }
 fn changed(app: &tauri::AppHandle) {
     let _ = app.emit_to("companion", "companion-config", companion_data(app));
@@ -660,6 +773,11 @@ fn save_preferences(
 ) -> Result<(), String> {
     settings_only(&w)?;
     preferences.validate()?;
+    if preferences.reply_notifications && !cfg!(target_os = "windows") {
+        return Err(
+            "Dedicated-window reply notifications are currently available on Windows.".into(),
+        );
+    }
     if preferences.chat_mode == "app" && !cfg!(target_os = "windows") {
         return Err("The dedicated ChatGPT app window is currently available on Windows.".into());
     }
@@ -668,6 +786,8 @@ fn save_preferences(
         return Err("Repair settings first; the original file is preserved.".into());
     }
     let old = s.preferences.lock().unwrap().clone();
+    let notifications_active = preferences.chat_mode == "app" && preferences.reply_notifications;
+    let old_notifications_active = old.chat_mode == "app" && old.reply_notifications;
     preferences.position = old.position;
     preferences.cohort = old.cohort;
     if !preferences.destination.is_empty() {
@@ -696,7 +816,26 @@ fn save_preferences(
             );
         }
     }
+    if notifications_active != old_notifications_active {
+        if let Err(error) = app
+            .state::<chat::Chat>()
+            .configure_notifications(&app, notifications_active)
+        {
+            if shortcut_changed && !preferences.shortcut.is_empty() {
+                let _ = app
+                    .global_shortcut()
+                    .unregister(preferences.shortcut.as_str());
+            }
+            let _ = startup::set(&app, old.startup);
+            return Err(error);
+        }
+    }
     if let Err(e) = preferences::save(&s.path, &preferences) {
+        if notifications_active != old_notifications_active {
+            let _ = app
+                .state::<chat::Chat>()
+                .configure_notifications(&app, old_notifications_active);
+        }
         if shortcut_changed && !preferences.shortcut.is_empty() {
             let _ = app
                 .global_shortcut()
@@ -709,7 +848,10 @@ fn save_preferences(
         let _ = app.global_shortcut().unregister(old.shortcut.as_str());
     }
     *s.preferences.lock().unwrap() = preferences.clone();
-    if preferences.chat_mode != "relay" && old.chat_mode == "relay" {
+    if preferences.chat_mode != "relay"
+        && !notifications_active
+        && (old.chat_mode == "relay" || old_notifications_active)
+    {
         let handle = app.clone();
         tauri::async_runtime::spawn_blocking(move || handle.state::<chat::Chat>().suspend());
         let _ = app.emit_to(
@@ -1136,6 +1278,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             connect_chat,
+            connect_notifications,
             chat_setup,
             get_chat,
             send_chat,

@@ -1,7 +1,8 @@
 # Project instructions
 
 - Near Dot is an independent local launcher. Recheck official OpenAI integration documentation before enabling any new dot route or API.
-- The owner requires normal ChatGPT chat usage: no separate API billing, no Codex inference, and no window relinking after restarts. The Windows app-window route opens the user's verified ChatGPT URL in an external Edge app window with an owner-only persistent profile. It is not an embedded webview or a separate assistant.
+- The owner requires normal ChatGPT chat usage: no separate API billing, no Codex inference, and no window relinking after restarts. The Windows app-window route respects the default Chrome or Edge browser and opens the user's verified ChatGPT URL with a separate owner-only persistent profile for each browser. Preserve existing profiles; never copy or inspect authentication data between browsers.
+- Incoming reply bubbles in app mode require explicit local opt-in and the authorized dot calling the notification plugin tool. Keep the real conversation in ChatGPT. Do not infer browser completion, scrape replies, send another inference request or claim every reply is detected automatically.
 - Never scrape ChatGPT, inspect session tokens, automate its private backend, embed its website, or invent dot state, unread counts or shared memory.
 - Keep destination URLs and user identities out of source, fixtures, logs, screenshots and releases. Use explicitly synthetic fixture paths only.
 - Rust is authoritative for destination validation, settings, OS actions and updating. Renderer permissions stay narrow; remote content is forbidden.

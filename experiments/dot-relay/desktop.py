@@ -7,6 +7,7 @@ from pathlib import Path
 from relay import Relay, RelayError, MAX_TEXT
 from connect import local_health
 from privacy import state_directory, private_path
+from notifications import Notifications
 
 STATE = state_directory()
 
@@ -28,6 +29,14 @@ def snapshot(mailbox):
 
 
 def dispatch(mailbox, request):
+    if request == {'operation': 'notification-snapshot'}:
+        return notification_snapshot(mailbox)
+    if set(request) == {'operation', 'enabled'} and request['operation'] == 'configure-notifications':
+        Notifications(mailbox.state).configure(request['enabled'])
+        return notification_snapshot(mailbox)
+    if set(request) == {'operation', 'notificationIds'} and request['operation'] == 'ack-notifications':
+        Notifications(mailbox.state).acknowledge(request['notificationIds'])
+        return notification_snapshot(mailbox)
     if request == {'operation': 'snapshot'}:
         return snapshot(mailbox)
     if set(request) == {'operation', 'text'} and request['operation'] == 'send':
@@ -53,6 +62,21 @@ def dispatch(mailbox, request):
     raise RelayError('operation_not_allowed')
 
 
+def notification_snapshot(mailbox):
+    inbox = Notifications(mailbox.state)
+    health = local_health()
+    configured = all(private_path(mailbox.state / name).is_file() for name in ('connection.json', 'runtime.key'))
+    enabled = inbox.enabled()
+    paused = private_path(mailbox.state / 'paused').exists()
+    remaining = mailbox.status()['proof_seconds_remaining']
+    connected = bool(enabled and configured and not paused and remaining != 0 and health.get('live') and
+                     health.get('startup_ready') and health.get('poll_failures') == 0)
+    return {'connected': connected, 'transportRunning': bool(health.get('live')),
+            'expiresIn': remaining,
+            'state': 'disabled' if not enabled else ('unconfigured' if not configured else ('expired' if remaining == 0 else ('connected' if connected else ('paused' if paused else 'disconnected')))),
+            'messages': [], 'notifications': inbox.pending(), 'notificationsConfigured': configured}
+
+
 def main():
     # Do not create a mailbox merely because the application was opened.
     mailbox = Relay(STATE) if (STATE / 'proof.sqlite3').exists() or (STATE / 'connection.json').exists() else None
@@ -67,8 +91,10 @@ def main():
                 request = json.loads(line)
                 if not isinstance(request, dict):
                     raise RelayError('invalid_request')
+                if mailbox is None and set(request) == {'operation', 'enabled'} and request['operation'] == 'configure-notifications' and request['enabled'] is True:
+                    mailbox = Relay(STATE)
                 if mailbox is None:
-                    if request != {'operation': 'snapshot'}:
+                    if request not in ({'operation': 'snapshot'}, {'operation': 'notification-snapshot'}, {'operation': 'configure-notifications', 'enabled': False}):
                         raise RelayError('connection_unavailable')
                     value = {'connected': False, 'transportRunning': False, 'state': 'unconfigured', 'expiresIn': None, 'messages': []}
                 else:

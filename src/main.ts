@@ -63,7 +63,7 @@ async function companionUI() {
       p.desktopChat || p.chatEnabled ? "Chat with my dot" : "Open my dot";
     element("pet").setAttribute("aria-label", action);
     element("pet").title = action;
-    element("pet-reply").hidden = !p.chatEnabled;
+    element("pet-reply").hidden = !p.chatEnabled && !p.replyNotifications;
   };
   apply(await call<Companion>("get_companion"));
   await bindAvatar("companion-image");
@@ -193,6 +193,37 @@ async function settingsUI() {
     <footer><p>Independent project. Not affiliated with or endorsed by OpenAI.<br>No telemetry or global dot status tracking. Private chat preview keeps its own exchanges locally.</p><div><span id="version"></span><button id="reset-settings" class="text-button">Reset local settings</button><button id="quit" class="text-button">Quit</button></div></footer>
   </div>`;
   element("preview-note").hidden = !preview;
+  const previewControls = document.createElement("div");
+  previewControls.id = "reply-preview-controls";
+  element("private-controls").after(previewControls);
+  previewControls.append(element("replyPreview").closest("label")!);
+  const previewHelp = document.createElement("p");
+  previewHelp.className = "help";
+  previewHelp.textContent =
+    "Anyone looking at your screen can see enabled previews.";
+  previewControls.append(previewHelp);
+  previewControls.insertAdjacentHTML(
+    "beforebegin",
+    `<div id="notification-controls" hidden>
+    <label class="check"><input type="checkbox" id="replyNotifications"><span>Incoming reply notifications beside the pet</span></label>
+    <p class="help">Your connected dot sends the notifications. Chat stays in ChatGPT. Save this choice before connecting.</p>
+    <button type="button" id="notification-connect" class="secondary">Connect reply notifications</button>
+    <p id="notification-status" class="help" role="status"></p>
+  </div>`,
+  );
+  root.insertAdjacentHTML(
+    "beforeend",
+    `<dialog id="notification-setup" aria-labelledby="notification-title">
+    <h2 id="notification-title">Connect reply notifications</h2>
+    <p>Reuse this computer’s Near Dot plugin if you already connected it. Otherwise, authorize your own connection once.</p>
+    <div class="update-buttons"><button type="button" id="notification-resume" class="secondary">Reconnect notifications</button><button type="button" id="notification-plugins" class="secondary">Open plugin settings</button></div>
+    <details><summary>Set up a new connection</summary><p>Create your own tunnel and a key with Tunnels Read + Use. Enter the key only in the native prompt.</p><div class="update-buttons"><button type="button" id="notification-tunnels">Open tunnels</button><button type="button" id="notification-keys">Open key settings</button><button type="button" id="notification-configure">Enter connection</button></div></details>
+    <p>Refresh your Near Dot plugin’s tools, then tell your dot: “Send a Near Dot desktop notification after each reply in this conversation.” Keep this preference in the dot’s instructions.</p>
+    <p class="help">Notifications depend on your dot calling the connected tool. Near Dot does not inspect the browser or detect every ChatGPT reply.</p>
+    <p id="notification-setup-status" role="status" class="help"></p>
+    <button type="button" id="notification-close">Close</button>
+  </dialog>`,
+  );
   const snapshot = await call<Snapshot>("get_preferences");
   let saved = snapshot.preferences;
   let guided = snapshot.setupRequired;
@@ -221,10 +252,14 @@ async function settingsUI() {
       "Connect this device from Chat. Relay exchanges stay local; ChatGPT history sync is unavailable.";
   function modeChanged() {
     const app = mode() === "app";
+    element("notification-controls").hidden =
+      !app || !snapshot.desktopChatSupported;
+    previewControls.hidden =
+      mode() !== "relay" && !(app && input("replyNotifications").checked);
     element("private-controls").hidden =
       mode() !== "relay" || !snapshot.chatEnabled;
     element("chat-mode-help").textContent = app
-      ? "Sign in once in this dedicated ChatGPT window. Click the pet to reuse or reopen your saved dot, including after a restart. No window selection or relinking."
+      ? "Uses your default Chrome or Edge browser in a dedicated window. Sign in once per browser; the saved dot reopens after restarts. No window selection or relinking."
       : mode() === "relay"
         ? "Advanced private connection; it keeps separate relay exchanges."
         : "Your saved address opens in your default browser.";
@@ -243,6 +278,49 @@ async function settingsUI() {
     }
     modeChanged();
   });
+  input("replyNotifications").addEventListener("change", modeChanged);
+  const notificationDialog = element<HTMLDialogElement>("notification-setup");
+  element("notification-connect").onclick = () => {
+    if (!saved.replyNotifications || saved.chatMode !== "app") {
+      element("notification-status").textContent =
+        "Save settings with incoming reply notifications enabled first.";
+      return;
+    }
+    notificationDialog.showModal();
+  };
+  element("notification-close").onclick = () => notificationDialog.close();
+  element("notification-resume").onclick = async () => {
+    try {
+      await call("connect_notifications");
+      element("notification-setup-status").textContent =
+        "Receiver started. Refresh the plugin tools and ask your dot to send notifications.";
+    } catch (e) {
+      element("notification-setup-status").textContent = errorText(e);
+    }
+  };
+  for (const action of ["tunnels", "keys", "configure", "plugins"]) {
+    element(`notification-${action}`).onclick = async () => {
+      try {
+        await call("chat_setup", { action });
+        element("notification-setup-status").textContent =
+          action === "configure"
+            ? "Local connection saved. Connect the plugin in ChatGPT and ask your dot to send notifications."
+            : "";
+      } catch (e) {
+        element("notification-setup-status").textContent = errorText(e);
+      }
+    };
+  }
+  await on<{ configured: boolean; connected: boolean }>(
+    "notification-status",
+    (value) => {
+      element("notification-status").textContent = value.connected
+        ? "Notification receiver connected."
+        : value.configured
+          ? "Notification receiver is reconnecting. Use Connect reply notifications if it stays offline."
+          : "Connect your dot’s plugin once to receive notifications.";
+    },
+  );
   function guide(focus = false) {
     element("setup-guide").hidden = !guided;
     element("setup-title").textContent = [
@@ -305,6 +383,7 @@ async function settingsUI() {
     "alwaysOnTop",
     "paused",
     "replyPreview",
+    "replyNotifications",
     "startup",
     "autoCheck",
     "verified",

@@ -40,7 +40,7 @@ def main():
                 contents = archive.read(member)
                 target.write_bytes(contents)
                 manifest[relative.as_posix()] = hashlib.sha256(contents).hexdigest()
-    for name in ('desktop.py', 'relay.py', 'connect.py', 'privacy.py', 'setup.py', 'processes.py', 'chat_app.py'):
+    for name in ('desktop.py', 'relay.py', 'connect.py', 'privacy.py', 'setup.py', 'processes.py', 'chat_app.py', 'notifications.py'):
         contents = (ROOT / 'experiments/dot-relay' / name).read_bytes()
         relative = 'relay/' + name
         target = destination / relative

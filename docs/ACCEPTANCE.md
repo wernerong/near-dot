@@ -1,5 +1,15 @@
 # Acceptance evidence and release gate
 
+## v1.2.0 default browser and dedicated-chat notifications — 13 October 2026 (Singapore)
+
+The owner reported that the dedicated ChatGPT window works but wanted the Windows default Chrome browser and incoming reply bubbles beside the pet. Commit `6ffa2bb` introduced the Edge-only external-window adapter and intentionally suspended relay notifications in dedicated-window mode. Read-only Windows inspection confirmed Chrome is the registered HTTPS default and Near Dot 1.1.0 is running. The new adapter chooses Chrome or Edge from that registration, keeps independent private profiles/caches, and preserves the existing Edge store.
+
+The optional notification receiver uses the owner's authorized MCP connection. Its `notify_reply` tool places only a bounded notice in a separate protected inbox; it does not queue a relay message, send an event, read browser content or perform inference. Rust permits only notification snapshot/acknowledgement operations in dedicated mode. The displayed bubble coalesces the observed batch into the latest notice, requests no focus and opens the actual ChatGPT window when clicked. Preview text retains its existing explicit opt-in. Delivery depends on the dot invoking the tool; this is not automatic detection of every browser reply.
+
+Local validation ran 68 Python tests (67 passed; one POSIX-only case skipped on Windows), including real synthetic Chrome and Edge window creation, ownership filtering, restoration and placement. All 21 JavaScript tests, 21 Playwright interface tests and the production frontend build passed. Notification tests cover opt-in, retained-ID deduplication, bounded storage, restart, batch acknowledgement, fixed access deadlines and byte-preserving rejection of future database schemas. Public-source and secret scans passed. The first local browser run exceeded navigation timeouts with seven concurrent workers; rerunning with two workers passed all tests. No timeout was relaxed.
+
+Exact-source native CI, installer/updater drills, installed Chrome sign-in and a real dot-requested notification exchange remain pending. Synthetic windows and fixtures do not establish signed-in ChatGPT access, receipt of every reply or long-duration reliability. The new Chrome profile needs one normal owner sign-in; authentication files are never copied from Edge or the ordinary Chrome profile.
+
 ## v1.1.0 dedicated Windows ChatGPT window and updater — 11 October 2026 (Singapore)
 
 Release source `1449cdddc6f41735377e8bfd95eb7a122d86e786` passed [exact-source Windows, Apple Silicon and Intel CI](https://github.com/wernerong/near-dot/actions/runs/38124338648). The production frontend build, 21 JavaScript tests, 18 browser tests and 23 Rust tests passed on all three targets. Python ran 54 cases: Windows passed 53 with one POSIX-only skip; each Mac passed 48 with six Windows-only skips. Lint, formatting, dependency audits, public-source/secret scans, signed-channel checks and architecture-specific review packaging passed. Windows native Edge tests use synthetic local content and cover window ownership, reuse and timeout privacy; they do not sign in to ChatGPT.
