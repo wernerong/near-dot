@@ -183,8 +183,19 @@ class ChatAppTests(unittest.TestCase):
         try:
             deadline = time.monotonic() + 20
             windows = []
+            retried_discovery = False
             while not windows and time.monotonic() < deadline:
-                windows = desktop.windows()
+                try:
+                    windows = desktop.windows()
+                except AppError as error:
+                    # Exercise the published retry path for a cold Windows CIM
+                    # lookup. Each attempt keeps its existing 20-second bound;
+                    # a repeated timeout or any different failure still fails.
+                    if retried_discovery or str(error) != 'Windows is still finding this companion’s browser profile. Try again.':
+                        raise
+                    retried_discovery = True
+                    deadline = time.monotonic() + 20
+                    continue
                 if not windows:
                     time.sleep(0.2)
             self.assertTrue(windows, 'Synthetic browser app did not create an OS window.')
