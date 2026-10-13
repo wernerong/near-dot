@@ -287,9 +287,11 @@ fn activate(app: &tauri::AppHandle) -> Result<(), String> {
             return Ok(());
         }
         let app = app.clone();
+        *app.state::<desktop::Desktop>().last_error.lock().unwrap() = None;
         let _ = app.emit_to("companion", "desktop-opening", true);
         tauri::async_runtime::spawn_blocking(move || {
             if let Err(message) = desktop::open(&app, &preferences.destination) {
+                *app.state::<desktop::Desktop>().last_error.lock().unwrap() = Some(message.clone());
                 let _ = app.emit_to("companion", "desktop-error", &message);
                 let _ = app.emit_to("settings", "app-error", &message);
             }
@@ -949,6 +951,23 @@ fn companion_action(w: WebviewWindow, app: tauri::AppHandle, action: String) -> 
         "activate" => activate(&app)?,
         "chat" => show_chat(&app),
         "latest-reply" => show_latest_reply(&app),
+        "desktop-status" => {
+            let message = app
+                .state::<desktop::Desktop>()
+                .last_error
+                .lock()
+                .unwrap()
+                .clone();
+            if let Some(message) = message {
+                app.dialog()
+                    .message(message)
+                    .title("Near Dot chat status")
+                    .parent(&w)
+                    .show(|_| {});
+            } else {
+                show_settings(&app);
+            }
+        }
         "dismiss-reply" => {
             let _ = app.emit_to("companion", "reply-available", false);
             if let Some(b) = app.get_webview_window("bubble") {

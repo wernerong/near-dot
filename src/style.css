@@ -532,16 +532,18 @@ progress {
 }
 .pet-error {
   position: absolute;
-  bottom: 0;
-  font-size: 9px;
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 11px;
   margin: 0;
   color: #663f2c;
-  max-width: 100%;
   background: #fff7e8;
-  line-height: 1.2;
-}
-.pet-error:empty {
-  display: none;
+  line-height: 16px;
+  z-index: 2;
 }
 .paused .pet {
   animation-play-state: paused;

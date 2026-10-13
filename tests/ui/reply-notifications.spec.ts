@@ -151,6 +151,73 @@ test("connected notification badge opens the latest notice without a relay compo
   ).toBe("latest-reply");
 });
 
+for (const size of [48, 68]) {
+  test(`opening and focus errors leave the ${size}px pet visible and clickable`, async ({
+    page,
+  }) => {
+    await receiverFixture(page, true);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: size, height: size });
+    await page.goto("/?view=companion");
+    const pet = page.locator("#pet");
+    const image = page.locator("#companion-image");
+    const before = await image.boundingBox();
+    const notice = async (event: string, payload: unknown) =>
+      page.evaluate(
+        ({ event, payload }) =>
+          (
+            window as unknown as {
+              syntheticNotice: (event: string, payload: unknown) => void;
+            }
+          ).syntheticNotice(event, payload),
+        { event, payload },
+      );
+    await expect(page.locator("#pet-error")).toBeHidden();
+    await notice("desktop-opening", true);
+    await expect(pet).toBeDisabled();
+    await expect(page.locator("#pet-error")).toHaveText("…");
+    const message =
+      "ChatGPT is visible beside the pet. Windows blocked keyboard focus; click the chat to type.";
+    await notice("desktop-error", message);
+    await notice("desktop-opening", false);
+    const badge = page.locator("#pet-error");
+    await expect(badge).toHaveText("!");
+    await expect(badge).toHaveAccessibleName(message);
+    await expect(badge).toHaveAttribute("title", message);
+    await expect(pet).toBeEnabled();
+    expect(await image.boundingBox()).toEqual(before);
+    const bounds = await badge.boundingBox();
+    expect(bounds!.width).toBeLessThanOrEqual(16);
+    expect(bounds!.height).toBeLessThanOrEqual(16);
+    expect(
+      await page.evaluate(() => {
+        const image = document
+          .getElementById("companion-image")!
+          .getBoundingClientRect();
+        return document.elementFromPoint(
+          image.x + image.width / 2,
+          image.y + image.height / 2,
+        )?.id;
+      }),
+    ).toBe("pet");
+    await badge.click();
+    expect(
+      await page.evaluate(() =>
+        sessionStorage.getItem("synthetic-notification-action"),
+      ),
+    ).toBe("desktop-status");
+    await notice("desktop-opening", true);
+    await notice("desktop-opening", false);
+    await expect(badge).toBeHidden();
+    await pet.click();
+    expect(
+      await page.evaluate(() =>
+        sessionStorage.getItem("synthetic-notification-action"),
+      ),
+    ).toBe("activate");
+  });
+}
+
 test("a bubble treats incoming previews as literal text and opens the actual chat route", async ({
   page,
 }) => {

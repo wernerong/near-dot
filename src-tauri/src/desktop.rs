@@ -11,6 +11,19 @@ use tauri::Manager;
 pub struct Desktop {
     operation: Mutex<()>,
     pub opening: AtomicBool,
+    pub last_error: Mutex<Option<String>>,
+}
+
+#[cfg(windows)]
+fn allow_helper_focus(pid: u32) {
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn AllowSetForegroundWindow(process_id: u32) -> i32;
+    }
+    // Only our freshly spawned, integrity-checked helper receives the grant.
+    // Windows still decides whether this user-initiated caller may grant focus.
+    // Never use ASFW_ANY or change the system foreground-lock policy.
+    unsafe { AllowSetForegroundWindow(pid) };
 }
 
 pub fn open(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
@@ -59,6 +72,8 @@ pub fn open(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
         .stderr(Stdio::null())
         .spawn()
         .map_err(|_| "Chat app window controls could not start.")?;
+    #[cfg(windows)]
+    allow_helper_focus(child.id());
     let result = (|| {
         let mut input = child.stdin.take().ok_or("Chat app input is unavailable.")?;
         let bytes =

@@ -49,7 +49,7 @@ async function companionUI() {
     <button id="pet" class="pet" aria-label="Chat with my dot" title="Chat with my dot"><img id="companion-image" src="/companion.svg" alt="" draggable="false"></button>
     <button id="pet-reply" class="pet-reply" aria-label="Show latest reply" title="Show latest reply">···</button><button id="pet-settings" class="pet-settings" aria-label="Open settings" title="Settings">⚙</button>
     <span id="floating-status" class="sr-only" role="status"></span>
-    <p id="pet-error" class="pet-error" role="status"></p>
+    <button id="pet-error" class="pet-error" hidden aria-label="Show chat status"></button>
   </section>`;
   let config: Companion;
   const apply = (p: Companion) => {
@@ -68,14 +68,22 @@ async function companionUI() {
   apply(await call<Companion>("get_companion"));
   await bindAvatar("companion-image");
   await on<Companion>("companion-config", apply);
-  await on<string>("desktop-error", (message) => {
-    element("pet-error").textContent = message;
-  });
+  let desktopStatus = false;
+  const status = (message = "", opening = false, desktop = false) => {
+    desktopStatus = desktop;
+    const badge = element<HTMLButtonElement>("pet-error");
+    badge.hidden = !message;
+    badge.disabled = opening;
+    badge.textContent = opening ? "…" : "!";
+    badge.title = message;
+    badge.setAttribute("aria-label", message);
+    element("floating-status").textContent = message;
+  };
+  await on<string>("desktop-error", (message) => status(message, false, true));
   await on<boolean>("desktop-opening", (opening) => {
     element<HTMLButtonElement>("pet").disabled = opening;
-    if (opening) element("pet-error").textContent = "Opening your chat…";
-    else if (element("pet-error").textContent === "Opening your chat…")
-      element("pet-error").textContent = "";
+    if (opening) status("Opening your chat…", true);
+    else if (element<HTMLButtonElement>("pet-error").disabled) status();
   });
   await on<boolean>("reply-available", (available) => {
     const button = element("pet-reply");
@@ -100,10 +108,11 @@ async function companionUI() {
   );
   document.addEventListener("visibilitychange", () => apply(config));
   const open = async () => {
+    status();
     try {
       await call("companion_action", { action: "activate" });
     } catch (e) {
-      element("pet-error").textContent = errorText(e);
+      status(errorText(e));
     }
   };
   let origin: [number, number] | null = null,
@@ -123,7 +132,7 @@ async function companionUI() {
         await call("companion_action", { action: "drag" });
         await call("companion_action", { action: "drag-finished" });
       } catch (e) {
-        element("pet-error").textContent = errorText(e);
+        status(errorText(e));
       }
     }
   });
@@ -138,7 +147,7 @@ async function companionUI() {
       await call("companion_action", { action: "drag" });
       await call("companion_action", { action: "drag-finished" });
     } catch (err) {
-      element("pet-error").textContent = errorText(err);
+      status(errorText(err));
     }
   });
   element("pet-settings").addEventListener(
@@ -148,6 +157,13 @@ async function companionUI() {
   element("pet-reply").addEventListener(
     "click",
     () => void call("companion_action", { action: "latest-reply" }),
+  );
+  element("pet-error").addEventListener(
+    "click",
+    () =>
+      void call("companion_action", {
+        action: desktopStatus ? "desktop-status" : "settings",
+      }),
   );
   root.addEventListener("contextmenu", (e) => {
     e.preventDefault();
