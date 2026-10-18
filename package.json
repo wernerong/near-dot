@@ -16,7 +16,7 @@
     "version:set": "node scripts/versions.mjs --set"
   },
   "dependencies": {
-    "@tauri-apps/api": "2.12.1"
+    "@tauri-apps/api": "2.12.4"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
